@@ -31,7 +31,7 @@ import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-export type BrowserImportEngine = "chromium" | "firefox";
+export type BrowserImportEngine = "chromium" | "firefox" | "safari";
 
 /**
  * Directory roots a definition builds its paths from. Passed in rather than
@@ -174,6 +174,26 @@ export const BROWSER_IMPORT_SOURCES: ReadonlyArray<BrowserImportSourceDefinition
     linuxSecretApplication: "chromium",
   }),
   {
+    // Safari keeps one cookie jar for the whole app rather than per-profile,
+    // and it sits inside the app container that Full Disk Access gates.
+    id: "safari",
+    name: "Safari",
+    engine: "safari",
+    platforms: ["darwin"],
+    userDataDirectory: (context) =>
+      context.platform === "darwin"
+        ? context.path.join(
+            context.home,
+            "Library",
+            "Containers",
+            "com.apple.Safari",
+            "Data",
+            "Library",
+            "Cookies",
+          )
+        : undefined,
+  },
+  {
     id: "firefox",
     name: "Firefox",
     engine: "firefox",
@@ -210,6 +230,7 @@ export const cookieDatabaseCandidatePaths = (
     ? profileDirectory
     : context.path.join(root, profileDirectory);
   if (definition.engine === "firefox") return [context.path.join(profile, "cookies.sqlite")];
+  if (definition.engine === "safari") return [context.path.join(profile, "Cookies.binarycookies")];
   return [context.path.join(profile, "Network", "Cookies"), context.path.join(profile, "Cookies")];
 };
 
@@ -387,6 +408,11 @@ const listSourceProfilesInDirectory = Effect.fnUntraced(function* (
   const fileSystem = yield* FileSystem.FileSystem;
   const root = definition.userDataDirectory(context);
   if (root === undefined) return [];
+
+  if (definition.engine === "safari") {
+    // One jar, no profiles: the directory is the profile.
+    return [{ directory: ".", name: "Safari" }];
+  }
 
   if (definition.engine === "firefox") {
     const declared = yield* fileSystem.readFileString(context.path.join(root, "profiles.ini")).pipe(
@@ -738,9 +764,11 @@ export const isSourceRunning = Effect.fn("BrowserImportSources.isSourceRunning")
   const fileSystem = yield* FileSystem.FileSystem;
   const root = definition.userDataDirectory(context);
   if (root === undefined) return false;
-  // Probe the source's own lock state rather than scanning the process table.
-  // Chromium exposes that through the cookie jar on Windows and through its
-  // user-data SingletonLock on POSIX.
+  // Safari has no lock and writes its jar atomically, so a running instance is
+  // not a hazard. Probe other sources' own lock state rather than scanning the
+  // process table: Chromium exposes it through the cookie jar on Windows and
+  // through its user-data SingletonLock on POSIX.
+  if (definition.engine === "safari") return false;
   if (definition.engine !== "firefox") {
     if (context.platform === "win32") {
       return yield* windowsChromiumCookiesAreHeld(definition, context);
