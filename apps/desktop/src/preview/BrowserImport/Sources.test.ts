@@ -1018,14 +1018,13 @@ describe("isSourceRunning for Firefox", () => {
 });
 
 describe("Windows user-data directories", () => {
-  it.effect("does not support any Chromium fork on win32", () =>
+  it.effect("keeps app-bound Chromium forks unsupported on win32", () =>
     Effect.sync(() => {
-      // No Chromium fork lists win32 anymore: since Chrome 127 their cookies
-      // are App-Bound Encrypted, so nothing can import them. Omitting the
-      // platform is what makes `unavailableReason` report `unsupportedPlatform`,
-      // hiding these sources like Arc and Helium.
+      // Helium retains the older DPAPI-backed store. Other Chromium forks use
+      // App-Bound Encryption, so omitting win32 makes `unavailableReason`
+      // report `unsupportedPlatform` and keeps them out of the menu.
       for (const source of BROWSER_IMPORT_SOURCES) {
-        if (source.engine === "chromium") {
+        if (source.engine === "chromium" && source.id !== "helium") {
           assert.notInclude(source.platforms, "win32");
         }
       }
