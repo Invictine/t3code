@@ -235,6 +235,9 @@ export async function readTranscriptRecords(
         for (const grokRecord of parseGrokLine(line)) out.push(grokRecord);
         return;
       }
+      if (provider === "opencode" || provider === "antigravity") {
+        return;
+      }
       const record = parseClaudeLine(line);
       if (record !== null) out.push(record);
     };

@@ -70,6 +70,8 @@ export function totalTokens(totals: UsageTokenTotals): number {
 export function mightCarryUsage(line: string, provider: UsageProviderKind): boolean {
   if (provider === "claude") return line.includes('"usage"');
   if (provider === "grok") return line.includes('"turn_completed"');
+  if (provider === "opencode") return line.includes('"tokens"') || line.includes('"step-finish"');
+  if (provider === "antigravity") return line.includes('"usage"') || line.includes('"token"');
   return line.includes('"token_count"');
 }
 
