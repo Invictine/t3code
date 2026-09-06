@@ -2563,16 +2563,35 @@ function OpenCommandPaletteDialog(props: {
         ? "Select"
         : undefined;
 
-  const footerTrailing = canOpenProjectFromFileManager ? (
-    <CommandFooterAction
-      disabled={isPickingProjectFolder}
-      onClick={() => {
-        void handleOpenProjectFromFileManager();
-      }}
-    >
-      {`Open in ${fileManagerName}`}
-    </CommandFooterAction>
-  ) : null;
+  // Typing a path that does not exist yet creates it on submit ("Create &
+  // Add"), but nothing says so until the results empty out. Offer the
+  // creation explicitly while the typed folder is still a pending new path.
+  const showNewFolderAction = willCreateProjectPath && !addProjectCloneFlow;
+  const footerTrailing =
+    canOpenProjectFromFileManager || showNewFolderAction ? (
+      <div className="flex items-center gap-1">
+        {showNewFolderAction ? (
+          <CommandFooterAction
+            aria-label={`Create ${resolvedAddProjectPath} and add it as a project`}
+            onClick={() => {
+              void handleAddProject(resolvedAddProjectPath);
+            }}
+          >
+            New folder
+          </CommandFooterAction>
+        ) : null}
+        {canOpenProjectFromFileManager ? (
+          <CommandFooterAction
+            disabled={isPickingProjectFolder}
+            onClick={() => {
+              void handleOpenProjectFromFileManager();
+            }}
+          >
+            {`Open in ${fileManagerName}`}
+          </CommandFooterAction>
+        ) : null}
+      </div>
+    ) : null;
 
   return (
     <CommandPaletteContent
