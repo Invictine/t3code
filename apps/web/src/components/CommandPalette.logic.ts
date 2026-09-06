@@ -25,9 +25,58 @@ export function browseInputEndPaddingClass(input: {
     return "*:data-[slot=autocomplete-input]:pe-38!";
   }
   if (input.hasHighlightedBrowseItem) {
-    return "*:data-[slot=autocomplete-input]:pe-30!";
+    // The submit button names the highlighted folder, so it needs the widest reserve.
+    return "*:data-[slot=autocomplete-input]:pe-44!";
   }
   return "*:data-[slot=autocomplete-input]:pe-24!";
+}
+
+export const BROWSE_ITEM_VALUE_PREFIX = "browse:";
+export const BROWSE_UP_ITEM_VALUE = "browse:up";
+
+/**
+ * Full filesystem path of the highlighted browse result, when the highlight
+ * is an actual directory. The ".." row navigates instead, so it never
+ * resolves to a submit target.
+ */
+export function getHighlightedBrowsePath(highlightedItemValue: string | null): string | null {
+  if (!highlightedItemValue?.startsWith(BROWSE_ITEM_VALUE_PREFIX)) {
+    return null;
+  }
+  if (highlightedItemValue === BROWSE_UP_ITEM_VALUE) {
+    return null;
+  }
+  return highlightedItemValue.slice(BROWSE_ITEM_VALUE_PREFIX.length);
+}
+
+/** Final segment of a browse path, tolerating either separator and trailing ones. */
+export function getBrowsePathLeaf(fullPath: string): string {
+  const leaf = fullPath.replace(/[/\\]+$/, "").split(/[/\\]/).pop() ?? "";
+  return leaf.length > 0 ? leaf : fullPath;
+}
+
+/**
+ * Which path submitting the browse picker adds as a project. A highlighted
+ * directory row is what the user points at, so it wins over the browsed
+ * parent. Otherwise the trailing-separator query means the browsed directory
+ * itself, a partial leaf resolves to its exact match, and anything else is
+ * taken literally (the server creates it on add).
+ */
+export function resolveBrowseSubmitPath(input: {
+  readonly query: string;
+  readonly highlightedBrowsePath: string | null;
+  readonly queryHasTrailingSeparator: boolean;
+  readonly browseParentPath: string | null;
+  readonly exactBrowseEntryFullPath: string | null;
+}): string {
+  if (input.highlightedBrowsePath) {
+    return input.highlightedBrowsePath;
+  }
+  const trimmedQuery = input.query.trim();
+  if (input.queryHasTrailingSeparator) {
+    return input.browseParentPath ?? trimmedQuery;
+  }
+  return input.exactBrowseEntryFullPath ?? trimmedQuery;
 }
 
 /**

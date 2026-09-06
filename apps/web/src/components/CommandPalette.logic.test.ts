@@ -2,12 +2,16 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import type { Thread } from "../types";
 import {
+  browseInputEndPaddingClass,
   buildBrowseGroups,
   buildThreadActionItems,
   enumerateCommandPaletteItems,
   filterPinnedBrowseEntries,
   filterCommandPaletteGroups,
+  getBrowsePathLeaf,
+  getHighlightedBrowsePath,
   reduceCommandPaletteUiState,
+  resolveBrowseSubmitPath,
   type CommandPaletteGroup,
 } from "./CommandPalette.logic";
 
@@ -468,5 +472,84 @@ describe("filterPinnedBrowseEntries", () => {
       visibleEntries: windowsEntries,
       exactEntry: windowsEntries[0],
     });
+  });
+});
+
+describe("browseInputEndPaddingClass", () => {
+  it("reserves the widest space when the button names the highlighted folder", () => {
+    expect(
+      browseInputEndPaddingClass({ willCreateProjectPath: false, hasHighlightedBrowseItem: true }),
+    ).toBe("*:data-[slot=autocomplete-input]:pe-44!");
+  });
+
+  it("reserves space for the create action", () => {
+    expect(
+      browseInputEndPaddingClass({ willCreateProjectPath: true, hasHighlightedBrowseItem: false }),
+    ).toBe("*:data-[slot=autocomplete-input]:pe-38!");
+  });
+
+  it("keeps the compact reserve for the normal add action", () => {
+    expect(
+      browseInputEndPaddingClass({ willCreateProjectPath: false, hasHighlightedBrowseItem: false }),
+    ).toBe("*:data-[slot=autocomplete-input]:pe-24!");
+  });
+});
+
+describe("getHighlightedBrowsePath", () => {
+  it("resolves a highlighted directory row to its full path", () => {
+    expect(getHighlightedBrowsePath("browse:/Users/test/AppData")).toBe("/Users/test/AppData");
+  });
+
+  it("ignores the parent-navigation row and non-browse highlights", () => {
+    expect(getHighlightedBrowsePath("browse:up")).toBeNull();
+    expect(getHighlightedBrowsePath("action:add-project")).toBeNull();
+    expect(getHighlightedBrowsePath(null)).toBeNull();
+  });
+});
+
+describe("getBrowsePathLeaf", () => {
+  it("returns the final segment across platforms", () => {
+    expect(getBrowsePathLeaf("/Users/test/AppData")).toBe("AppData");
+    expect(getBrowsePathLeaf("C:\\Users\\test\\AppData")).toBe("AppData");
+    expect(getBrowsePathLeaf("~/projects/my-app/")).toBe("my-app");
+  });
+});
+
+describe("resolveBrowseSubmitPath", () => {
+  it("prefers the highlighted folder over the browsed parent", () => {
+    expect(
+      resolveBrowseSubmitPath({
+        query: "~/",
+        highlightedBrowsePath: "/Users/test/AppData",
+        queryHasTrailingSeparator: true,
+        browseParentPath: "/Users/test",
+        exactBrowseEntryFullPath: null,
+      }),
+    ).toBe("/Users/test/AppData");
+  });
+
+  it("resolves the browsed directory itself for trailing-separator queries", () => {
+    expect(
+      resolveBrowseSubmitPath({
+        query: "~/projects/",
+        highlightedBrowsePath: null,
+        queryHasTrailingSeparator: true,
+        browseParentPath: "/Users/test/projects",
+        exactBrowseEntryFullPath: null,
+      }),
+    ).toBe("/Users/test/projects");
+  });
+
+  it("resolves a partial leaf to its exact match, else the raw query", () => {
+    const base = {
+      query: "~/App",
+      highlightedBrowsePath: null,
+      queryHasTrailingSeparator: false,
+      browseParentPath: "/Users/test",
+    };
+    expect(
+      resolveBrowseSubmitPath({ ...base, exactBrowseEntryFullPath: "/Users/test/AppData" }),
+    ).toBe("/Users/test/AppData");
+    expect(resolveBrowseSubmitPath({ ...base, exactBrowseEntryFullPath: null })).toBe("~/App");
   });
 });

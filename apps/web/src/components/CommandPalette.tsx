@@ -135,11 +135,14 @@ import {
   type CommandPaletteView,
   filterCommandPaletteGroups,
   filterPinnedBrowseEntries,
+  getBrowsePathLeaf,
   getCommandPaletteInputPlaceholder,
   getCommandPaletteMode,
+  getHighlightedBrowsePath,
   ITEM_ICON_CLASS,
   RECENT_THREAD_LIMIT,
   reduceCommandPaletteUiState,
+  resolveBrowseSubmitPath,
   type SearchOverlayMode,
 } from "./CommandPalette.logic";
 import { orderItemsByPreferredIds, sortLogicalProjectsForSidebar } from "./Sidebar.logic";
@@ -2167,13 +2170,28 @@ function OpenCommandPaletteDialog(props: {
     );
   }, [browseNavigation, browsePath.parentPath, pinnedCloneDirectoryName, prefetchBrowsePath]);
 
+  // A highlighted directory row is what the user points at: submitting adds
+  // that folder, not the browsed parent. (The clone-destination step keeps
+  // query semantics because the query already carries the pinned name.)
+  const highlightedBrowsePath =
+    addProjectCloneFlow?.step === "confirm"
+      ? null
+      : getHighlightedBrowsePath(highlightedItemValue);
+  const highlightedBrowseLeaf = highlightedBrowsePath
+    ? getBrowsePathLeaf(highlightedBrowsePath)
+    : null;
+
   // Resolve the add-project path from browse data when available. When the
   // query has a trailing separator (e.g. "~/projects/foo/"), parentPath is the
   // directory itself. Otherwise the user typed a partial leaf name, so we need
   // the exact browse entry's fullPath or fall back to the raw query.
-  const resolvedAddProjectPath = hasTrailingPathSeparator(query)
-    ? (browseResult?.parentPath ?? query.trim())
-    : (exactBrowseEntry?.fullPath ?? query.trim());
+  const resolvedAddProjectPath = resolveBrowseSubmitPath({
+    query,
+    highlightedBrowsePath,
+    queryHasTrailingSeparator: hasTrailingPathSeparator(query),
+    browseParentPath: browseResult?.parentPath ?? null,
+    exactBrowseEntryFullPath: exactBrowseEntry?.fullPath ?? null,
+  });
 
   const canBrowseUp = !relativePathNeedsActiveProject && browsePath.canBrowseUp;
 
@@ -2237,10 +2255,16 @@ function OpenCommandPaletteDialog(props: {
     ? willCreateProjectPath
       ? "Create & Clone"
       : "Clone"
-    : willCreateProjectPath
-      ? "Create & Add"
-      : "Add";
+    : highlightedBrowseLeaf
+      ? `Add "${highlightedBrowseLeaf}"`
+      : willCreateProjectPath
+        ? "Create & Add"
+        : "Add";
   const addShortcutLabel = hasHighlightedBrowseItem ? `${submitModifierLabel} Enter` : "Enter";
+  // Name the exact target so "Add" never reads as "add whatever is open".
+  const submitHintLabel = highlightedBrowsePath
+    ? `Add ${highlightedBrowsePath} (${addShortcutLabel})`
+    : `${submitActionLabel} (${addShortcutLabel})`;
   const remoteProjectButtonLabel = addProjectCloneFlow
     ? addProjectCloneFlow.source === "url"
       ? "Continue"
@@ -2521,7 +2545,7 @@ function OpenCommandPaletteDialog(props: {
                 "absolute inset-e-2.5 top-1/2 pe-1 ps-2 -translate-y-1/2",
                 hasHighlightedBrowseItem ? "gap-1" : "gap-1.5",
               )}
-              aria-label={`${submitActionLabel} (${addShortcutLabel})`}
+              aria-label={submitHintLabel}
               disabled={
                 !canCreateProjectInEnvironment(browseEnvironment?.connection.phase) ||
                 relativePathNeedsActiveProject ||
@@ -2543,16 +2567,14 @@ function OpenCommandPaletteDialog(props: {
             />
           }
         >
-          <span>
+          <span className={highlightedBrowseLeaf ? "max-w-36 truncate" : undefined}>
             {isCloneDestinationStep && isRemoteProjectPending ? "Cloning" : submitActionLabel}
           </span>
           <KbdGroup className="pointer-events-none -me-0.5 items-center gap-1">
             <Kbd>{hasHighlightedBrowseItem ? `${submitModifierLabel} Enter` : "Enter"}</Kbd>
           </KbdGroup>
         </TooltipTrigger>
-        <TooltipPopup side="top">
-          {submitActionLabel} ({addShortcutLabel})
-        </TooltipPopup>
+        <TooltipPopup side="top">{submitHintLabel}</TooltipPopup>
       </Tooltip>
     ) : null;
 
