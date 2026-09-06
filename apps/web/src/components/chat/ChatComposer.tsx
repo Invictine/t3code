@@ -13,6 +13,7 @@ import type {
   ScopedThreadRef,
   ServerProvider,
   ThreadId,
+  UsageLimitsReport,
 } from "@t3tools/contracts";
 import {
   ProviderDriverKind,
@@ -1234,6 +1235,8 @@ export interface ChatComposerProps {
   // Provider / model
   lockedProvider: ProviderDriverKind | null;
   providerStatuses: ServerProvider[];
+  /** Live usage-limits report for the model picker's tracked instance, if the host provides one. */
+  getUsageLimitsReport?: (instanceId: ProviderInstanceId) => UsageLimitsReport | null;
   activeProjectDefaultModelSelection: ModelSelection | null | undefined;
   activeThreadModelSelection: ModelSelection | null | undefined;
 
@@ -1389,6 +1392,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onProviderModelSelect,
     onOpenProviderSetup,
     getModelDisabledReason,
+    getUsageLimitsReport,
     toggleInteractionMode,
     handleRuntimeModeChange,
     handleInteractionModeChange,
@@ -4004,6 +4008,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         getModelDisabledReason={getModelDisabledReason}
         onInstanceModelChange={onProviderModelSelect}
         onOpenProviderSetup={onOpenProviderSetup}
+        {...(getUsageLimitsReport ? { getUsageLimitsReport } : {})}
       />
 
       {composerControlsCompact ? (

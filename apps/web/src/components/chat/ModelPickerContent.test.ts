@@ -8,6 +8,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { deriveProviderInstanceEntries } from "../../providerInstances";
 import {
+  resolveModelPickerLimitsInstanceId,
   resolveModelPickerSelectedModel,
   shouldIncludeModelPickerOption,
   shouldOfferModelPickerSetup,
@@ -211,5 +212,22 @@ describe("shouldOfferModelPickerSetup", () => {
         [],
       ),
     ).toBe(true);
+  });
+});
+
+describe("resolveModelPickerLimitsInstanceId", () => {
+  it("tracks the sidebar-selected instance", () => {
+    expect(
+      resolveModelPickerLimitsInstanceId(
+        ProviderInstanceId.make("codex"),
+        ProviderInstanceId.make("claude"),
+      ),
+    ).toBe("codex");
+  });
+
+  it("falls back to the active instance on Favorites", () => {
+    expect(
+      resolveModelPickerLimitsInstanceId("favorites", ProviderInstanceId.make("claude")),
+    ).toBe("claude");
   });
 });

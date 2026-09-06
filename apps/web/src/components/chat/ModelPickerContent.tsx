@@ -3,8 +3,10 @@ import {
   type ProviderInstanceId,
   type ProviderDriverKind,
   type ResolvedKeybindingsConfig,
+  type UsageLimitsReport,
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
+import { limitsNotice } from "@t3tools/shared/usageLimits";
 import { useAtomValue } from "@effect/atom-react";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { memo, useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
@@ -12,6 +14,7 @@ import { ChevronRightIcon, SearchIcon } from "lucide-react";
 import { ModelListRow } from "./ModelListRow";
 import { ModelPickerSidebar } from "./ModelPickerSidebar";
 import { getProviderStatusMessage, hasProviderSetup } from "./ProviderStatusBanner";
+import { LimitWindows, resetCreditsSummary } from "../usage/UsageLimits";
 import {
   modelPickerLegacySectionKey,
   modelPickerModelKey,
@@ -113,6 +116,17 @@ export function shouldOfferModelPickerSetup(
   );
 }
 
+/**
+ * Which instance the picker's usage-limits section tracks: the sidebar
+ * selection, falling back to the composer's active instance on Favorites.
+ */
+export function resolveModelPickerLimitsInstanceId(
+  selectedInstanceId: ProviderInstanceId | "favorites",
+  activeInstanceId: ProviderInstanceId,
+): ProviderInstanceId {
+  return selectedInstanceId === "favorites" ? activeInstanceId : selectedInstanceId;
+}
+
 const EMPTY_MODEL_JUMP_LABELS = new Map<string, string>();
 
 function ModelListSeparator() {
@@ -150,6 +164,13 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   onRequestClose?: () => void;
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
+  /**
+   * Live usage-limits report for one instance, derived by the parent from
+   * provider statuses — so it refreshes when a turn settles or the
+   * environment reconnects, with no polling timer. Absent outside the chat
+   * composer, where no statuses exist; the picker then omits the section.
+   */
+  getUsageLimitsReport?: (instanceId: ProviderInstanceId) => UsageLimitsReport | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const {
@@ -220,6 +241,17 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
           : [],
       ),
   );
+  // Point-in-time snapshot for the tracked instance. The parent re-derives
+  // the getter when provider statuses change, so opening the picker or
+  // switching sidebar rows always reads fresh data without a repaint timer.
+  const limitsSnapshot = useMemo(() => {
+    if (!props.getUsageLimitsReport) return null;
+    const report = props.getUsageLimitsReport(
+      resolveModelPickerLimitsInstanceId(selectedInstanceId, props.activeInstanceId),
+    );
+    if (!report || report.accounts.length === 0) return null;
+    return { report, now: Date.now() };
+  }, [props.getUsageLimitsReport, props.activeInstanceId, selectedInstanceId]);
   const serverKeybindings = useAtomValue(primaryServerKeybindingsAtom);
   const keybindings = providedKeybindings ?? serverKeybindings;
   const updateSettings = useUpdateClientSettings();
@@ -921,6 +953,40 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                 />
               </ComboboxListVirtualized>
             </div>
+            {limitsSnapshot ? (
+              <div className="max-h-56 shrink-0 overflow-y-auto border-t border-border/70 p-2">
+                <div className="px-1 py-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  Usage limits
+                </div>
+                {limitsSnapshot.report.accounts.map((account) => {
+                  const notice = limitsNotice(account.limits);
+                  return (
+                    <div key={account.id} className="flex min-w-0 flex-col gap-1 px-1 py-1.5">
+                      {limitsSnapshot.report.accounts.length > 1 ? (
+                        <span className="truncate text-xs text-muted-foreground">
+                          {[account.label, account.plan].filter(Boolean).join(" · ")}
+                        </span>
+                      ) : null}
+                      {notice ? (
+                        <span className="text-xs text-muted-foreground">{notice}</span>
+                      ) : (
+                        <LimitWindows
+                          compact
+                          driver={account.driver}
+                          windows={account.limits.windows}
+                          now={limitsSnapshot.now}
+                        />
+                      )}
+                      {account.limits.resetCredits ? (
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {resetCreditsSummary(account.limits.resetCredits, limitsSnapshot.now, true)}
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             {providerSetupEntries.length > 0 ? (
               <div className="max-h-44 shrink-0 overflow-y-auto border-t border-border/70 p-2">
                 {providerSetupEntries.map((entry) => (

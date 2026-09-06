@@ -2740,6 +2740,14 @@ export default function ChatView(props: ChatViewProps) {
     usageLimitSources,
     usageLimitsKey,
   ]);
+  // Live tracker for the model picker: derived from the same provider
+  // statuses as the banner, so it refreshes when a turn settles, the model
+  // changes, or the environment reconnects — with no polling timer.
+  const getModelPickerUsageLimitsReport = useCallback(
+    (instanceId: ProviderInstanceId) =>
+      collectProviderUsageLimits(instanceId, providerStatuses, usageLimitSources, Date.now()),
+    [providerStatuses, usageLimitSources],
+  );
   // Responses can resolve after navigating away; only the originating thread's panel clears.
   const clearUsageLimitsFor = useCallback(
     (threadKey: string) =>
@@ -8203,6 +8211,7 @@ export default function ChatView(props: ChatViewProps) {
                             interactionMode={interactionMode}
                             lockedProvider={lockedProvider}
                             providerStatuses={providerStatuses as ServerProvider[]}
+                            getUsageLimitsReport={getModelPickerUsageLimitsReport}
                             activeProjectDefaultModelSelection={activeProjectDefaultModelSelection}
                             activeThreadModelSelection={activeThread?.modelSelection}
                             activeContextWindow={activeContextWindow}
