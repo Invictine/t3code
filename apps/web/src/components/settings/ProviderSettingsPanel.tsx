@@ -79,7 +79,7 @@ import { ExpandableText } from "./ExpandableText";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
 import { UsageProviderSettings } from "./UsageProviderSettings";
 import { ProviderSetupSection, readAntigravityAuthMethod } from "./ProviderSetupSection";
-import { GeminiSetupSection, readGeminiCredentials } from "./GeminiSetupSection";
+import { GeminiSetupSection } from "./GeminiSetupSection";
 import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
 import { searchableSetting } from "./settingsSearch";
 import {
@@ -922,7 +922,15 @@ export function EnvironmentProviderSettings({
               onCredentialsChange={(credentials) =>
                 updateProviderInstance(row, {
                   ...row.instance,
-                  config: { ...readGeminiCredentials(row.instance.config), ...credentials },
+                  // Merge into the FULL existing config. Rebuilding only from
+                  // readGeminiCredentials() would delete binaryPath (and any
+                  // other driver-specific field) when cookies are updated.
+                  config: {
+                    ...(typeof row.instance.config === "object" && row.instance.config !== null
+                      ? (row.instance.config as Record<string, unknown>)
+                      : {}),
+                    ...credentials,
+                  },
                 })
               }
             />
