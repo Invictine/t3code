@@ -50,6 +50,64 @@ function isValidPort(port: string): boolean {
   return Number.isInteger(value) && value > 0 && value <= 65_535;
 }
 
+/** Result of one attempt to push cookies to the bridge and verify them live. */
+type BridgeVerifyResult =
+  | { readonly ok: true; readonly models: unknown }
+  | { readonly ok: false; readonly offline: true }
+  | {
+      readonly ok: false;
+      readonly offline: false;
+      readonly status: number;
+      readonly detail: string;
+    };
+
+/**
+ * Push cookies into the running bridge and verify them with Google. Isolated so
+ * both the sign-in dialog and the offline "Apply saved cookies" retry use the
+ * exact same path and the same honesty about what succeeded.
+ */
+async function verifyWithBridge(
+  port: string,
+  psid: string,
+  psidts: string,
+): Promise<BridgeVerifyResult> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/v1/auth/session`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ psid, psidts }),
+    });
+    if (!response.ok) {
+      const detail = (await response.text()).trim().slice(0, 300);
+      return { ok: false, offline: false, status: response.status, detail };
+    }
+    // Newer bridges report which Gemini 4 app models the account actually has.
+    // Older ones don't; that's fine, so parse defensively and never fail sign-in.
+    let models: unknown = undefined;
+    try {
+      const body = (await response.json()) as { models?: unknown } | null;
+      models = body?.models ?? undefined;
+    } catch {
+      // Non-JSON body from an older bridge — ignore.
+    }
+    return { ok: true, models };
+  } catch {
+    return { ok: false, offline: true };
+  }
+}
+
+/** Short, honest note about the bridge's discovered model availability. */
+function describeModelAvailability(models: unknown): string {
+  if (models === null || typeof models !== "object") return "";
+  const raw = models as Record<string, unknown>;
+  const flag = (key: string) =>
+    raw[key] === true ? "available" : raw[key] === false ? "NOT available" : "unknown";
+  return (
+    ` Bridge reports: Argon ${flag("argon")}, Hydrogen ${flag("hydrogen")} ` +
+    "(advisory — the provider still lists both)."
+  );
+}
+
 interface GeminiSetupSectionProps {
   readonly config: unknown;
   readonly enabled: boolean;
@@ -89,42 +147,68 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
     const psidts = draft.psidts.trim();
     setVerifying(true);
     setError(null);
-    try {
-      // Push the cookies into the running bridge so they take effect without a
-      // restart. The bridge never echoes them back in its response or errors.
-      const response = await fetch(`http://127.0.0.1:${port}/v1/auth/session`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ psid, psidts }),
-      });
-      if (!response.ok) {
+    const result = await verifyWithBridge(port, psid, psidts);
+    setVerifying(false);
+
+    if (!result.ok) {
+      if (result.offline) {
+        // A stopped bridge must not block saving: keep the credentials locally so
+        // they are ready for the next launch, but label them UNVERIFIED.
+        props.onCredentialsChange({ port, psid, psidts, verified: false });
+        setNotice(
+          "Bridge is not reachable. Cookies were saved locally but NOT verified with Google. " +
+            "Start the bridge, then use 'Apply saved cookies' to confirm them.",
+        );
+        setOpen(false);
+      } else {
         // Never persist cookies Google/the bridge rejected: doing so would
         // replace a working sign-in with a bad one. Keep the dialog open.
-        const detail = (await response.text()).trim().slice(0, 300);
         setError(
-          detail
-            ? `Verification failed (${response.status}): ${detail}`
-            : `Verification failed (${response.status}). Nothing was saved. Check the bridge log.`,
+          result.detail
+            ? `Verification failed (${result.status}): ${result.detail}`
+            : `Verification failed (${result.status}). Nothing was saved. Check the bridge log.`,
         );
-        return;
       }
-    } catch {
-      // A stopped bridge must not block saving: keep the credentials locally so
-      // they are ready for the next launch, but label them UNVERIFIED.
-      props.onCredentialsChange({ port, psid, psidts, verified: false });
-      setNotice(
-        "Bridge is not reachable. Cookies were saved locally but NOT verified with Google. " +
-          "Start the bridge, then use 'Verify & save' to confirm them.",
-      );
-      setOpen(false);
       return;
-    } finally {
-      setVerifying(false);
     }
+
     // 2xx means the bridge contacted Google successfully.
     props.onCredentialsChange({ port, psid, psidts, verified: true });
-    setNotice("Signed in. The bridge verified these cookies live with Google and is using them.");
+    setNotice(
+      "Signed in. The bridge verified these cookies live with Google and is using them." +
+        describeModelAvailability(result.models),
+    );
     setOpen(false);
+  }
+
+  /** Re-apply cookies saved while the bridge was offline (offline recovery). */
+  async function retrySaved() {
+    if (!hasCookies) return;
+    setVerifying(true);
+    setError(null);
+    setNotice(null);
+    const result = await verifyWithBridge(saved.port, saved.psid, saved.psidts);
+    setVerifying(false);
+
+    if (result.ok) {
+      props.onCredentialsChange({ ...saved, verified: true });
+      setNotice(
+        "Applied saved cookies. The bridge verified them live with Google." +
+          describeModelAvailability(result.models),
+      );
+    } else if (result.offline) {
+      setNotice(
+        "Bridge is still not reachable. Saved cookies are unchanged and remain unverified. " +
+          "Start the bridge and try again.",
+      );
+    } else {
+      // Do not clear saved cookies on a rejection — the session may have simply
+      // gone stale. Stay honest about the state and let the user update them.
+      setNotice(
+        `Google/bridge rejected the saved cookies (${result.detail}). They remain saved but ` +
+          "unverified; use 'Update cookies' if they are stale.",
+      );
+    }
   }
 
   return (
@@ -149,7 +233,7 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
             {verified
               ? "Signed in. Cookies verified live with Google."
               : hasCookies
-                ? "Cookies saved but NOT yet verified with Google. With the bridge running, use 'Verify & save' to confirm them."
+                ? "Cookies saved but NOT yet verified with Google. With the bridge running, use 'Apply saved cookies' to confirm them."
                 : "Paste the session cookies from a signed-in gemini.google.com tab."}
           </p>
           {notice ? <p className="text-muted-foreground [overflow-wrap:anywhere]">{notice}</p> : null}
@@ -157,6 +241,16 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
             <Button size="xs" variant="outline" onClick={openDialog}>
               {hasCookies ? "Update cookies" : "Sign in"}
             </Button>
+            {hasCookies && !verified ? (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => void retrySaved()}
+                disabled={verifying}
+              >
+                {verifying ? "Checking…" : "Apply saved cookies"}
+              </Button>
+            ) : null}
             {hasCookies ? (
               <Button
                 size="xs"
