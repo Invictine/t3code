@@ -70,6 +70,21 @@ export function ProviderIcon(props: ProviderIconProps) {
     );
   }
 
+  if (props.provider === "gemini") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path
+          fill="#4285F4"
+          d="M12 1.5c.45 4.86 2.64 8.55 7.5 10.5-4.86 1.95-7.05 5.64-7.5 10.5-.45-4.86-2.64-8.55-7.5-10.5C9.36 10.05 11.55 6.36 12 1.5Z"
+        />
+        <Path
+          fill="#D96570"
+          d="M12 5.1c.26 2.8 1.52 4.94 4.33 6.06C13.52 12.28 12.26 14.42 12 17.22c-.26-2.8-1.52-4.94-4.33-6.06C10.48 10.04 11.74 7.9 12 5.1Z"
+        />
+      </Svg>
+    );
+  }
+
   // codex (and unknown drivers)
   return (
     <Svg width={size} height={size} viewBox="0 0 256 260" fill="none">

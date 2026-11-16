@@ -764,6 +764,75 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;
 
 /**
+ * Gemini web-app (`gemini.google.com`) settings.
+ *
+ * Google exposes no official OAuth for the web-app-only Argon / Hydrogen
+ * models, so sign-in uses the same two session cookies the web app itself
+ * uses. They are stored as provider-instance settings and never logged. The
+ * local OpenAI-compatible bridge that consumes them is configured with
+ * `port`, and `binaryPath` selects the native OpenCode executable the driver
+ * launches with a forced, Gemini-only config.
+ */
+export const GeminiSettings = makeProviderSettingsSchema(
+  {
+    enabled: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(false)),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    binaryPath: makeBinaryPathSetting("opencode").pipe(
+      Schema.annotateKey({
+        title: "OpenCode executable",
+        description:
+          "Path to the native OpenCode executable. Leave empty to use the bundled native default.",
+        providerSettingsForm: {
+          placeholder: "opencode",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    port: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("8100")),
+      Schema.annotateKey({
+        title: "Bridge port",
+        description: "Port of the local Gemini bridge (http://127.0.0.1:<port>/v1).",
+        providerSettingsForm: {
+          placeholder: "8100",
+          clearWhenEmpty: "persist",
+        },
+      }),
+    ),
+    psid: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "__Secure-1PSID",
+        description:
+          "Gemini web-app session cookie. Stored in plain text on this environment; never logged.",
+        providerSettingsForm: {
+          control: "password",
+          placeholder: "Paste __Secure-1PSID",
+          clearWhenEmpty: "persist",
+        },
+      }),
+    ),
+    psidts: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "__Secure-1PSIDTS",
+        description:
+          "Gemini web-app session cookie. Stored in plain text on this environment; never logged.",
+        providerSettingsForm: {
+          control: "password",
+          placeholder: "Paste __Secure-1PSIDTS",
+          clearWhenEmpty: "persist",
+        },
+      }),
+    ),
+  },
+  { order: ["binaryPath", "port", "psid", "psidts"] },
+);
+export type GeminiSettings = typeof GeminiSettings.Type;
+
+/**
  * A read-only quota source outside this environment's provider CLIs. The
  * only kind today is a CLIProxyAPI hub, whose management API reports the
  * windows of every pooled account. The key travels in settings for now, like
@@ -966,6 +1035,7 @@ export const ServerSettings = Schema.Struct({
     grok: GrokSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     opencode: OpenCodeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     antigravity: AntigravitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+    gemini: GeminiSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   // New driver-agnostic instance map. Keyed by `ProviderInstanceId`; values
   // are `ProviderInstanceConfig` envelopes. The driver-specific config blob
@@ -1138,6 +1208,14 @@ const OpenCodeSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(CustomModelSetting)),
 });
 
+const GeminiSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  binaryPath: Schema.optionalKey(TrimmedString),
+  port: Schema.optionalKey(TrimmedString),
+  psid: Schema.optionalKey(TrimmedString),
+  psidts: Schema.optionalKey(TrimmedString),
+});
+
 export const ServerSettingsPatch = Schema.Struct({
   // Server settings
   enableLegacyTokenStreaming: Schema.optionalKey(Schema.Boolean),
@@ -1196,6 +1274,7 @@ export const ServerSettingsPatch = Schema.Struct({
       grok: Schema.optionalKey(GrokSettingsPatch),
       opencode: Schema.optionalKey(OpenCodeSettingsPatch),
       antigravity: Schema.optionalKey(AntigravitySettingsPatch),
+      gemini: Schema.optionalKey(GeminiSettingsPatch),
     }),
   ),
   // Whole-map replacement for the new instance config. Patching individual

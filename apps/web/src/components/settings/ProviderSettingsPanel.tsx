@@ -79,6 +79,7 @@ import { ExpandableText } from "./ExpandableText";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
 import { UsageProviderSettings } from "./UsageProviderSettings";
 import { ProviderSetupSection, readAntigravityAuthMethod } from "./ProviderSetupSection";
+import { GeminiSetupSection, readGeminiCredentials } from "./GeminiSetupSection";
 import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
 import { searchableSetting } from "./settingsSearch";
 import {
@@ -911,6 +912,19 @@ export function EnvironmentProviderSettings({
               enabled={resolveProviderInstanceEnabled(row.instance)}
               readOnly={readOnly}
               onEnable={() => updateProviderInstance(row, { ...row.instance, enabled: true })}
+            />
+          ) : mode === "editor" && row.driver === "gemini" ? (
+            <GeminiSetupSection
+              config={row.instance.config}
+              enabled={resolveProviderInstanceEnabled(row.instance)}
+              readOnly={readOnly}
+              onEnable={() => updateProviderInstance(row, { ...row.instance, enabled: true })}
+              onCredentialsChange={(credentials) =>
+                updateProviderInstance(row, {
+                  ...row.instance,
+                  config: { ...readGeminiCredentials(row.instance.config), ...credentials },
+                })
+              }
             />
           ) : null
         }

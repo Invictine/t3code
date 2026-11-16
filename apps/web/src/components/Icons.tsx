@@ -650,6 +650,31 @@ export const AntigravityIcon: Icon = (props) => (
   </svg>
 );
 
+/** Gemini — a four-point spark in Google's palette. */
+export const GeminiIcon: Icon = (props) => (
+  <svg {...props} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient
+        id="gemini-spark-gradient"
+        x1="2"
+        y1="22"
+        x2="22"
+        y2="2"
+        gradientUnits="userSpaceOnUse"
+      >
+        <stop stopColor="#4285F4" />
+        <stop offset="0.38" stopColor="#9B72CB" />
+        <stop offset="0.72" stopColor="#D96570" />
+        <stop offset="1" stopColor="#FBBC05" />
+      </linearGradient>
+    </defs>
+    <path
+      fill="url(#gemini-spark-gradient)"
+      d="M12 1.5c.45 4.86 2.64 8.55 7.5 10.5-4.86 1.95-7.05 5.64-7.5 10.5-.45-4.86-2.64-8.55-7.5-10.5C9.36 10.05 11.55 6.36 12 1.5Z"
+    />
+  </svg>
+);
+
 export const OpenCodeIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg">
     <g clipPath="url(#opencode__clip0_1311_94969)">

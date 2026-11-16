@@ -58,7 +58,9 @@ function readInstanceCustomModels(
   instanceId: ProviderInstanceId,
   driverKind: ProviderDriverKind,
 ): ReadonlyArray<CustomModelDefinition> {
-  if (driverKind === "antigravity") return [];
+  // Gemini ships a fixed two-model catalog from its driver; custom models do
+  // not apply (the bridge only serves Argon and Hydrogen).
+  if (driverKind === "antigravity" || driverKind === "gemini") return [];
   const instance = settings.providerInstances?.[instanceId];
   const config = instance?.config;
   if (config !== null && typeof config === "object") {
@@ -73,7 +75,7 @@ function readInstanceCustomModels(
   }
   const legacyProviders = settings.providers as Record<
     string,
-    { readonly customModels: ReadonlyArray<unknown> } | undefined
+    { readonly customModels?: ReadonlyArray<unknown> } | undefined
   >;
   return readCustomModelEntries(legacyProviders[driverKind]?.customModels ?? []);
 }
