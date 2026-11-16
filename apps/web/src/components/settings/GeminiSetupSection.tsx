@@ -80,34 +80,40 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
       setError("Bridge port must be a number between 1 and 65535.");
       return;
     }
+    const port = draft.port.trim();
+    const psid = draft.psid.trim();
+    const psidts = draft.psidts.trim();
     setVerifying(true);
     setError(null);
-    let validation: string | null = null;
     try {
-      const response = await fetch(`http://127.0.0.1:${draft.port.trim()}/v1/models`, {
-        headers: { Authorization: `Bearer ${API_KEY}` },
+      // Push the cookies into the running bridge so they take effect without a
+      // restart. The bridge never echoes them back in its response or errors.
+      const response = await fetch(`http://127.0.0.1:${port}/v1/auth/session`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ psid, psidts }),
       });
       if (!response.ok) {
-        validation = `Bridge returned ${response.status}. Cookies were saved, but check that the bridge is running.`;
-      } else {
-        const body = (await response.json()) as { data?: Array<{ id: string }> };
-        const ids = body.data?.map((entry) => entry.id) ?? [];
-        validation =
-          ids.length > 0
-            ? `Connected. Bridge models: ${ids.join(", ")}.`
-            : "Bridge reachable but returned no models. Cookies were saved.";
+        const detail = (await response.text()).trim().slice(0, 300);
+        setError(
+          detail
+            ? `Bridge rejected the cookies (${response.status}): ${detail}`
+            : `Bridge rejected the cookies (${response.status}). Check the bridge log.`,
+        );
+        return;
       }
     } catch {
-      validation = "Bridge is not reachable right now. Cookies were saved; start the bridge to use them.";
+      // A stopped bridge must not block saving: keep the credentials locally so
+      // they are ready for the next launch, with a clear notice about it.
+      props.onCredentialsChange({ port, psid, psidts });
+      setNotice("Bridge is not reachable right now. Cookies were saved; start the bridge to use them.");
+      setOpen(false);
+      return;
     } finally {
       setVerifying(false);
     }
-    props.onCredentialsChange({
-      port: draft.port.trim(),
-      psid: draft.psid.trim(),
-      psidts: draft.psidts.trim(),
-    });
-    setNotice(validation);
+    props.onCredentialsChange({ port, psid, psidts });
+    setNotice("Signed in. The live bridge is now using these cookies.");
     setOpen(false);
   }
 

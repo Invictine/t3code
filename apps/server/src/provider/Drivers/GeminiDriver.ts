@@ -5,8 +5,9 @@
  * Google exposes no official OAuth for these web-app-only models. Sign-in is
  * represented by the two session cookies the web app itself uses; they live in
  * the provider-instance settings and are never logged by this driver. The
- * local OpenAI-compatible bridge reads those cookies from its own environment,
- * so this driver only needs to point OpenCode at that bridge.
+ * settings dialog pushes them to the running bridge at sign-in, which persists
+ * them to its own .env, so this driver only needs to point OpenCode at that
+ * bridge.
  *
  * The model catalog is static: the two supported models are supplied by this
  * driver rather than by the server-controlled model manifest. Agent execution
