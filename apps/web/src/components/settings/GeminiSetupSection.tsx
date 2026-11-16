@@ -27,11 +27,13 @@ export interface GeminiCredentials {
   readonly port: string;
   readonly psid: string;
   readonly psidts: string;
+  /** True only after the bridge confirmed the cookies live with Google. */
+  readonly verified: boolean;
 }
 
 const API_KEY = "gemini-local";
 
-export function readGeminiCredentials(config: unknown): GeminiCredentials {
+function readGeminiCredentials(config: unknown): GeminiCredentials {
   const raw = config !== null && typeof config === "object" ? (config as Record<string, unknown>) : {};
   const stringValue = (key: string) =>
     typeof raw[key] === "string" ? (raw[key] as string).trim() : "";
@@ -39,6 +41,7 @@ export function readGeminiCredentials(config: unknown): GeminiCredentials {
     port: stringValue("port") || "8100",
     psid: stringValue("psid"),
     psidts: stringValue("psidts"),
+    verified: raw.verified === true,
   };
 }
 
@@ -57,7 +60,8 @@ interface GeminiSetupSectionProps {
 
 export function GeminiSetupSection(props: GeminiSetupSectionProps) {
   const saved = readGeminiCredentials(props.config);
-  const connected = saved.psid.length > 0 && saved.psidts.length > 0;
+  const hasCookies = saved.psid.length > 0 && saved.psidts.length > 0;
+  const verified = hasCookies && saved.verified;
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<GeminiCredentials>(saved);
   const [error, setError] = useState<string | null>(null);
@@ -94,26 +98,32 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
         body: JSON.stringify({ psid, psidts }),
       });
       if (!response.ok) {
+        // Never persist cookies Google/the bridge rejected: doing so would
+        // replace a working sign-in with a bad one. Keep the dialog open.
         const detail = (await response.text()).trim().slice(0, 300);
         setError(
           detail
-            ? `Bridge rejected the cookies (${response.status}): ${detail}`
-            : `Bridge rejected the cookies (${response.status}). Check the bridge log.`,
+            ? `Verification failed (${response.status}): ${detail}`
+            : `Verification failed (${response.status}). Nothing was saved. Check the bridge log.`,
         );
         return;
       }
     } catch {
       // A stopped bridge must not block saving: keep the credentials locally so
-      // they are ready for the next launch, with a clear notice about it.
-      props.onCredentialsChange({ port, psid, psidts });
-      setNotice("Bridge is not reachable right now. Cookies were saved; start the bridge to use them.");
+      // they are ready for the next launch, but label them UNVERIFIED.
+      props.onCredentialsChange({ port, psid, psidts, verified: false });
+      setNotice(
+        "Bridge is not reachable. Cookies were saved locally but NOT verified with Google. " +
+          "Start the bridge, then use 'Verify & save' to confirm them.",
+      );
       setOpen(false);
       return;
     } finally {
       setVerifying(false);
     }
-    props.onCredentialsChange({ port, psid, psidts });
-    setNotice("Signed in. The live bridge is now using these cookies.");
+    // 2xx means the bridge contacted Google successfully.
+    props.onCredentialsChange({ port, psid, psidts, verified: true });
+    setNotice("Signed in. The bridge verified these cookies live with Google and is using them.");
     setOpen(false);
   }
 
@@ -136,21 +146,28 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
         <div className="grid gap-2 border-t border-border/60 pt-3">
           <p className="font-medium">Google account</p>
           <p role="status" className="text-muted-foreground">
-            {connected
-              ? "Signed in with Gemini web-app cookies."
-              : "Paste the session cookies from a signed-in gemini.google.com tab."}
+            {verified
+              ? "Signed in. Cookies verified live with Google."
+              : hasCookies
+                ? "Cookies saved but NOT yet verified with Google. With the bridge running, use 'Verify & save' to confirm them."
+                : "Paste the session cookies from a signed-in gemini.google.com tab."}
           </p>
           {notice ? <p className="text-muted-foreground [overflow-wrap:anywhere]">{notice}</p> : null}
           <div className="flex flex-wrap gap-2">
             <Button size="xs" variant="outline" onClick={openDialog}>
-              {connected ? "Update cookies" : "Sign in"}
+              {hasCookies ? "Update cookies" : "Sign in"}
             </Button>
-            {connected ? (
+            {hasCookies ? (
               <Button
                 size="xs"
                 variant="ghost"
                 onClick={() => {
-                  props.onCredentialsChange({ port: saved.port, psid: "", psidts: "" });
+                  props.onCredentialsChange({
+                    port: saved.port,
+                    psid: "",
+                    psidts: "",
+                    verified: false,
+                  });
                   setNotice(null);
                 }}
               >
@@ -168,7 +185,8 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
             <DialogDescription>
               In Chrome, open gemini.google.com, press F12 → Application → Cookies, and copy the
               values of <code>__Secure-1PSID</code> and <code>__Secure-1PSIDTS</code>. Google has no
-              official OAuth for these web-app models, so these cookies are the credential.
+              official OAuth for these web-app models, so these cookies are the credential. With the
+              bridge running, <strong>Verify &amp; save</strong> checks them live against Google.
             </DialogDescription>
           </DialogHeader>
           <DialogPanel className="grid gap-3">
@@ -180,7 +198,7 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
                 autoComplete="off"
                 spellCheck={false}
                 value={draft.psid}
-                maxLength={16_384}
+                maxLength={4096}
                 placeholder="Paste cookie value"
                 onChange={(event) => setDraft({ ...draft, psid: event.target.value })}
               />
@@ -193,7 +211,7 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
                 autoComplete="off"
                 spellCheck={false}
                 value={draft.psidts}
-                maxLength={16_384}
+                maxLength={4096}
                 placeholder="Paste cookie value"
                 onChange={(event) => setDraft({ ...draft, psidts: event.target.value })}
               />
@@ -212,7 +230,9 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
             </div>
             <p className="text-muted-foreground">
               Credentials are stored as provider settings on this environment and are never logged.
-              They are validated against the local bridge, which sends them to Google.
+              They are validated against the local bridge, which sends them to Google. If
+              verification fails, nothing is saved. This is an unofficial, reverse-engineered path
+              that may violate Google&apos;s Terms of Service — prefer a secondary account.
             </p>
             {error ? (
               <p role="alert" className="text-destructive [overflow-wrap:anywhere]">

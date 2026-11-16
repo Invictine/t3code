@@ -5,9 +5,11 @@
  * Google exposes no official OAuth for these web-app-only models. Sign-in is
  * represented by the two session cookies the web app itself uses; they live in
  * the provider-instance settings and are never logged by this driver. The
- * settings dialog pushes them to the running bridge at sign-in, which persists
- * them to its own .env, so this driver only needs to point OpenCode at that
- * bridge.
+ * settings dialog pushes them to the running bridge at sign-in; the bridge
+ * verifies them live with Google and persists them to its own .env, so this
+ * driver only needs to point OpenCode at that bridge. Merely having cookies is
+ * not treated as a successful sign-in -- the snapshot reports `unauthenticated`
+ * until the dialog recorded a successful live verification.
  *
  * The model catalog is static: the two supported models are supplied by this
  * driver rather than by the server-controlled model manifest. Agent execution
@@ -144,7 +146,11 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
       const serverSettings = yield* ServerSettingsService;
       const settings = { ...config, enabled } satisfies GeminiSettings;
       const port = resolvePort(settings.port);
-      const configured = settings.psid.trim().length > 0 && settings.psidts.trim().length > 0;
+      const hasCookies = settings.psid.trim().length > 0 && settings.psidts.trim().length > 0;
+      // Cookies on disk are only a claim. `verified` is set by the sign-in dialog
+      // only after the bridge confirmed them live with Google, so never present
+      // merely having cookies as an authenticated / ready connection.
+      const verified = hasCookies && settings.verified;
 
       // The forced config is injected into the process environment of the
       // OpenCode server the adapter spawns. Cookies are intentionally not
@@ -187,17 +193,23 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
           models: GEMINI_MODELS,
           slashCommands: [COMPACT_SLASH_COMMAND],
           probe: {
-            installed: configured,
+            installed: hasCookies,
             version: null,
-            status: !settings.enabled || !configured ? "warning" : "ready",
-            auth: { status: configured ? "authenticated" : "unauthenticated" },
+            status: !settings.enabled || !verified ? "warning" : "ready",
+            auth: { status: verified ? "authenticated" : "unauthenticated" },
             ...(!settings.enabled
               ? { message: "Gemini is disabled in T3 Code settings." }
-              : configured
+              : verified
                 ? {}
-                : {
-                    message: "Add your Gemini web-app cookies in provider settings to connect.",
-                  }),
+                : hasCookies
+                  ? {
+                      message:
+                        "Credentials saved but not yet verified with Google. Open " +
+                        "Settings → Providers → Gemini and use 'Verify & save' with the bridge running.",
+                    }
+                  : {
+                      message: "Add your Gemini web-app cookies in provider settings to connect.",
+                    }),
           },
         });
 

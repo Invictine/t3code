@@ -779,6 +779,13 @@ export const GeminiSettings = makeProviderSettingsSchema(
       Schema.withDecodingDefault(Effect.succeed(false)),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
+    // Set only after the bridge confirmed the cookies with Google. Cookies
+    // merely being present is NOT proof of a working sign-in, so the driver
+    // reports the connection as unauthenticated until this is true.
+    verified: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(false)),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
     binaryPath: makeBinaryPathSetting("opencode").pipe(
       Schema.annotateKey({
         title: "OpenCode executable",
@@ -1210,6 +1217,7 @@ const OpenCodeSettingsPatch = Schema.Struct({
 
 const GeminiSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
+  verified: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(TrimmedString),
   port: Schema.optionalKey(TrimmedString),
   psid: Schema.optionalKey(TrimmedString),
