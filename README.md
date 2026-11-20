@@ -17,6 +17,12 @@
   <a href="https://discord.gg/jn4EGJjrvv">Discord</a>
 </p>
 
+## T3 Code (Gemini) for Windows
+
+This fork adds a native Gemini provider and installs side by side with regular T3 Code. OpenCode sends requests to a local bridge that uses your signed-in Gemini web session. **Gemini 4 Neon** is the default on eligible accounts.
+
+The [gemini-jio-argon README](https://github.com/Invictine/gemini-jio-argon) has the demo, Windows build steps, and pinned bridge access requirements.
+
 <p align="center">
   <a href="https://t3.codes">
     <img src="./.github/readme/hero.webp" width="100%" alt="T3 Code on desktop with a finished Claude thread, next to the phone app asking to approve a command from Codex" />
