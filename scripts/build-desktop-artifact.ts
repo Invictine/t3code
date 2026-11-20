@@ -2737,10 +2737,19 @@ export function isDesktopPreviewVersion(version: string): boolean {
 }
 
 export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
+  if (isGeminiDesktopVersion(version)) return "gemini";
   return resolveWebAssetBrandForChannel(resolveDesktopUpdateChannel(version));
 }
 
 export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIconAssets {
+  if (isGeminiDesktopVersion(version)) {
+    return {
+      macIconPng: BRAND_ASSET_PATHS.geminiMacIconPng,
+      linuxIconPng: BRAND_ASSET_PATHS.geminiLinuxIconPng,
+      windowsIconIco: BRAND_ASSET_PATHS.geminiWindowsIconIco,
+    };
+  }
+
   if (resolveDesktopUpdateChannel(version) === "nightly") {
     return {
       macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,

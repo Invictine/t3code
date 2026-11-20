@@ -27,6 +27,17 @@ export const BRAND_ASSET_PATHS = {
   nightlyWebIcon192Png: "assets/nightly/nightly-web-icon-192x192.png",
   nightlyWebIcon512Png: "assets/nightly/nightly-web-icon-512x512.png",
 
+  geminiIosIconPng: "assets/gemini/gemini-ios-1024.png",
+  geminiMacIconPng: "assets/gemini/gemini-macos-1024.png",
+  geminiLinuxIconPng: "assets/gemini/gemini-universal-1024.png",
+  geminiWindowsIconIco: "assets/gemini/gemini-windows.ico",
+  geminiWebFaviconIco: "assets/gemini/gemini-web-favicon.ico",
+  geminiWebFavicon16Png: "assets/gemini/gemini-web-favicon-16x16.png",
+  geminiWebFavicon32Png: "assets/gemini/gemini-web-favicon-32x32.png",
+  geminiWebAppleTouchIconPng: "assets/gemini/gemini-web-apple-touch-180.png",
+  geminiWebIcon192Png: "assets/gemini/gemini-web-icon-192x192.png",
+  geminiWebIcon512Png: "assets/gemini/gemini-web-icon-512x512.png",
+
   developmentDesktopIconPng: "assets/dev/blueprint-macos-1024.png",
   developmentWindowsIconIco: "assets/dev/blueprint-windows.ico",
   developmentWebFaviconIco: "assets/dev/blueprint-web-favicon.ico",
@@ -37,7 +48,7 @@ export const BRAND_ASSET_PATHS = {
   developmentWebIcon512Png: "assets/dev/blueprint-web-icon-512x512.png",
 } as const;
 
-export type WebAssetBrand = "development" | "nightly" | "production";
+export type WebAssetBrand = "development" | "nightly" | "production" | "gemini";
 
 export const WEB_ASSET_CHANNELS = ["latest", "nightly"] as const;
 
@@ -85,6 +96,14 @@ const WEB_ICON_SOURCE_PATHS_BY_BRAND = {
     appleTouchIconPng: BRAND_ASSET_PATHS.productionWebAppleTouchIconPng,
     icon192Png: BRAND_ASSET_PATHS.productionWebIcon192Png,
     icon512Png: BRAND_ASSET_PATHS.productionWebIcon512Png,
+  },
+  gemini: {
+    faviconIco: BRAND_ASSET_PATHS.geminiWebFaviconIco,
+    favicon16Png: BRAND_ASSET_PATHS.geminiWebFavicon16Png,
+    favicon32Png: BRAND_ASSET_PATHS.geminiWebFavicon32Png,
+    appleTouchIconPng: BRAND_ASSET_PATHS.geminiWebAppleTouchIconPng,
+    icon192Png: BRAND_ASSET_PATHS.geminiWebIcon192Png,
+    icon512Png: BRAND_ASSET_PATHS.geminiWebIcon512Png,
   },
 } as const satisfies Record<WebAssetBrand, Record<keyof typeof WEB_ICON_TARGET_FILENAMES, string>>;
 

@@ -39,6 +39,8 @@ import {
   packWindowsServerAsar,
   preflightWindowsDesktopBuild,
   renderMacPasskeyEntitlements,
+  resolveDesktopBuildIconAssets,
+  resolveDesktopWebAssetBrand,
   resolveMacFileExclusions,
   resolveMacWebAuthnEntitlements,
   resolveMacPasskeySigningConfiguration,
@@ -567,6 +569,24 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       ),
     ),
   );
+
+  it("reserves the Gemini icon set and web brand for Gemini desktop builds", () => {
+    const geminiVersion = "0.1.12-nightly.20261120.4994-gemini.1";
+    const nightlyVersion = "0.1.12-nightly.20261120.4994";
+
+    assert.deepStrictEqual(resolveDesktopBuildIconAssets(geminiVersion), {
+      macIconPng: "assets/gemini/gemini-macos-1024.png",
+      linuxIconPng: "assets/gemini/gemini-universal-1024.png",
+      windowsIconIco: "assets/gemini/gemini-windows.ico",
+    });
+    assert.deepStrictEqual(resolveDesktopBuildIconAssets(nightlyVersion), {
+      macIconPng: "assets/nightly/nightly-macos-1024.png",
+      linuxIconPng: "assets/nightly/nightly-universal-1024.png",
+      windowsIconIco: "assets/nightly/nightly-windows.ico",
+    });
+    assert.equal(resolveDesktopWebAssetBrand(geminiVersion), "gemini");
+    assert.equal(resolveDesktopWebAssetBrand(nightlyVersion), "nightly");
+  });
 
   it.effect("names the Electron window class in the Linux desktop entry", () =>
     Effect.gen(function* () {
