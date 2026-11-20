@@ -122,6 +122,29 @@ describe("DesktopEnvironment", () => {
     }),
   );
 
+  it.effect("keeps the packaged Windows Gemini app separate from the stock environment", () =>
+    Effect.gen(function* () {
+      const environment = yield* makeEnvironment(
+        { platform: "win32", isPackaged: true, appVersion: "0.0.38-gemini.1" },
+        {
+          T3CODE_HOME: "/Users/alice/.t3",
+          T3CODE_PORT: "4949",
+          T3CODE_DESKTOP_APP_USER_MODEL_ID: "com.t3tools.t3code",
+          VITE_DEV_SERVER_URL: "http://localhost:5173",
+        },
+      );
+
+      assert.equal(environment.displayName, "T3 Code (Gemini)");
+      assert.isFalse(environment.isDevelopment);
+      assert.equal(environment.branding.stageLabel, "Gemini");
+      assert.equal(environment.stateDir, "/Users/alice/.t3-gemini/userdata");
+      assert.equal(environment.userDataDirName, "t3code-gemini");
+      assert.equal(environment.legacyUserDataDirName, "T3 Code (Gemini)");
+      assert.equal(environment.appUserModelId, "com.invictine.t3code.gemini");
+      assert.deepEqual(environment.configuredBackendPort, Option.none());
+    }),
+  );
+
   it.effect("keeps implicit development state separate from production state", () =>
     Effect.gen(function* () {
       const development = yield* makeEnvironment(

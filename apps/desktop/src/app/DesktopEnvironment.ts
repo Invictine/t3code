@@ -14,6 +14,13 @@ import * as Path from "effect/Path";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
 import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
+import {
+  GEMINI_DESKTOP_HOME,
+  GEMINI_DESKTOP_ID,
+  GEMINI_DESKTOP_NAME,
+  GEMINI_DESKTOP_PACKAGE,
+  isGeminiDesktopVersion,
+} from "./GeminiDesktopVariant.ts";
 import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 
 export interface MakeDesktopEnvironmentInput {
@@ -37,6 +44,7 @@ export class DesktopEnvironment extends Context.Service<
     readonly processArch: string;
     readonly isPackaged: boolean;
     readonly isDevelopment: boolean;
+    readonly isGeminiVariant: boolean;
     readonly appVersion: string;
     readonly appPath: string;
     readonly resourcesPath: string;
@@ -101,7 +109,11 @@ function resolveDesktopAppStageLabel(input: {
 function resolveDesktopAppBranding(input: {
   readonly isDevelopment: boolean;
   readonly appVersion: string;
+  readonly isGeminiVariant: boolean;
 }): DesktopAppBranding {
+  if (input.isGeminiVariant) {
+    return { baseName: APP_BASE_NAME, stageLabel: "Gemini", displayName: GEMINI_DESKTOP_NAME };
+  }
   const stageLabel = resolveDesktopAppStageLabel(input);
   return {
     baseName: APP_BASE_NAME,
@@ -146,8 +158,14 @@ const make = Effect.fn("desktop.environment.make")(function* (
   const path = yield* Path.Path;
   const config = yield* DesktopConfig.DesktopConfig;
   const homeDirectory = input.homeDirectory;
-  const devServerUrl = config.devServerUrl;
+  const isGeminiVariant =
+    input.platform === "win32" && input.isPackaged && isGeminiDesktopVersion(input.appVersion);
+  const devServerUrl = isGeminiVariant ? Option.none<URL>() : config.devServerUrl;
   const isDevelopment = Option.isSome(devServerUrl);
+  // A launch from a stock T3 shell must not inherit its state path.
+  const t3Home = isGeminiVariant
+    ? Option.some(path.join(homeDirectory, GEMINI_DESKTOP_HOME))
+    : config.t3Home;
   const appDataDirectory =
     input.platform === "win32"
       ? Option.getOrElse(config.appDataDirectory, () =>
@@ -159,7 +177,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
   const baseDir = resolveDesktopBaseDir({
     homeDirectory,
     joinPath: path.join,
-    t3Home: config.t3Home,
+    t3Home,
   });
   const rootDir = path.resolve(input.dirname, "../../..");
   const appRoot = input.isPackaged ? input.appPath : rootDir;
@@ -170,16 +188,25 @@ const make = Effect.fn("desktop.environment.make")(function* (
   const branding = resolveDesktopAppBranding({
     isDevelopment,
     appVersion: input.appVersion,
+    isGeminiVariant,
   });
   const displayName = branding.displayName;
   const stateDir = resolveDesktopStateDir({
     baseDir,
     isDevelopment,
     joinPath: path.join,
-    t3Home: config.t3Home,
+    t3Home,
   });
-  const userDataDirName = isDevelopment ? "t3code-dev" : "t3code";
-  const legacyUserDataDirName = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
+  const userDataDirName = isGeminiVariant
+    ? GEMINI_DESKTOP_PACKAGE
+    : isDevelopment
+      ? "t3code-dev"
+      : "t3code";
+  const legacyUserDataDirName = isGeminiVariant
+    ? GEMINI_DESKTOP_NAME
+    : isDevelopment
+      ? "T3 Code (Dev)"
+      : "T3 Code (Alpha)";
   const linuxApplicationsDir = path.join(
     Option.getOrElse(config.xdgDataHome, () => path.join(homeDirectory, ".local", "share")),
     "applications",
@@ -193,6 +220,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
     processArch: input.processArch,
     isPackaged: input.isPackaged,
     isDevelopment,
+    isGeminiVariant,
     appVersion: input.appVersion,
     appPath: input.appPath,
     resourcesPath,
@@ -217,15 +245,17 @@ const make = Effect.fn("desktop.environment.make")(function* (
       : path.join(input.appPath, "dev-app-update.yml"),
     devServerUrl,
     devRemoteT3ServerEntryPath: config.devRemoteT3ServerEntryPath,
-    configuredBackendPort: config.configuredBackendPort,
+    configuredBackendPort: isGeminiVariant ? Option.none() : config.configuredBackendPort,
     commitHashOverride: config.commitHashOverride,
     otlpTracesUrl: config.otlpTracesUrl,
     otlpExportIntervalMs: config.otlpExportIntervalMs,
     branding,
     displayName,
-    appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>
-      isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code",
-    ),
+    appUserModelId: isGeminiVariant
+      ? GEMINI_DESKTOP_ID
+      : Option.getOrElse(config.appUserModelIdOverride, () =>
+          isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code",
+        ),
     linuxDesktopEntryName: isDevelopment ? "t3code-dev.desktop" : "t3code.desktop",
     linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",
     linuxApplicationsDir,

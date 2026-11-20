@@ -2,14 +2,9 @@
  * GeminiDriver — first-class provider for the Gemini web app's Argon /
  * Hydrogen models.
  *
- * Google exposes no official OAuth for these web-app-only models. Sign-in is
- * represented by the two session cookies the web app itself uses; they live in
- * the provider-instance settings and are never logged by this driver. The
- * settings dialog pushes them to the running bridge at sign-in; the bridge
- * verifies them live with Google and persists them to its own .env, so this
- * driver only needs to point OpenCode at that bridge. Merely having cookies is
- * not treated as a successful sign-in -- the snapshot reports `unauthenticated`
- * until the dialog recorded a successful live verification.
+ * The local bridge either drives a Chrome worker or uses session cookies.
+ * Readiness follows the live bridge's selected backend. The Chrome worker
+ * uses its existing browser session and does not need cookies saved in T3.
  *
  * The model catalog is static: the two supported models are supplied by this
  * driver rather than by the server-controlled model manifest. Agent execution
@@ -33,6 +28,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import { HttpClient } from "effect/unstable/http";
 
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
@@ -44,7 +40,11 @@ import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import { OpenCodeRuntime } from "../opencodeRuntime.ts";
 import * as OpenCodeServerOwner from "../OpenCodeServerOwner.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "../providerMaintenance.ts";
-import { buildServerProvider, COMPACT_SLASH_COMMAND } from "../providerSnapshot.ts";
+import {
+  buildServerProvider,
+  COMPACT_SLASH_COMMAND,
+  type ProviderProbeResult,
+} from "../providerSnapshot.ts";
 import {
   haveProviderSnapshotSettingsChanged,
   makeProviderSnapshotSettingsSource,
@@ -56,6 +56,7 @@ import {
   type ProviderInstance,
 } from "../ProviderDriver.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
+import { probeGeminiBridge } from "./geminiBridgeStatus.ts";
 import { withInstanceIdentity } from "./instanceIdentity.ts";
 
 const DRIVER_KIND = ProviderDriverKind.make("gemini");
@@ -69,7 +70,6 @@ export const GEMINI_MODELS: ReadonlyArray<ServerProviderModel> = [
     shortName: "Argon",
     subProvider: "gemini-app",
     isCustom: false,
-    isDefault: true,
     capabilities: null,
   },
   {
@@ -78,6 +78,7 @@ export const GEMINI_MODELS: ReadonlyArray<ServerProviderModel> = [
     shortName: "Hydrogen",
     subProvider: "gemini-app",
     isCustom: false,
+    isDefault: true,
     capabilities: null,
   },
 ];
@@ -87,9 +88,6 @@ const MAINTENANCE_CAPABILITIES = makeManualOnlyProviderMaintenanceCapabilities({
   packageName: null,
 });
 
-/** Native OpenCode executable proven by the gemini-jio-argon harness. */
-const DEFAULT_GEMINI_BINARY_PATH =
-  "C:\\Users\\aniru\\AppData\\Local\\hermes\\node\\node_modules\\@opencode\\cli\\bin\\opencode.exe";
 const GEMINI_API_KEY = "gemini-local";
 const DEFAULT_BRIDGE_PORT = 8100;
 
@@ -99,25 +97,24 @@ function resolvePort(raw: string | undefined): number {
 }
 
 /**
- * Build the exact one-line OpenCode config the harness forces through
- * `OPENCODE_CONFIG_CONTENT`. Only the port is configurable; every other field
- * is pinned so the agent can never reach another provider.
+ * Point the OpenCode v1 server at the local bridge and enable only Gemini.
  */
-export function buildGeminiConfigContent(port: number): string {
+export function buildGeminiConfigContent(port: number, apiKey = GEMINI_API_KEY): string {
   return JSON.stringify({
     $schema: "https://opencode.ai/config.json",
-    model: GEMINI_ARGON_MODEL,
-    providers: {
+    model: GEMINI_HYDROGEN_MODEL,
+    enabled_providers: ["gemini-app"],
+    provider: {
       "gemini-app": {
         name: "Gemini App",
-        package: "@opencode/ai/providers/openai-compatible",
-        settings: {
+        npm: "@ai-sdk/openai-compatible",
+        options: {
           baseURL: `http://127.0.0.1:${port}/v1`,
-          apiKey: GEMINI_API_KEY,
+          apiKey,
         },
         models: {
-          argon: { name: "Gemini 4 Argon" },
-          hydrogen: { name: "Gemini 4 Hydrogen" },
+          argon: { name: "Gemini 4 Argon", tool_call: true },
+          hydrogen: { name: "Gemini 4 Hydrogen", tool_call: true },
         },
       },
     },
@@ -128,6 +125,7 @@ export type GeminiDriverEnv =
   | BackgroundPolicy.BackgroundPolicy
   | Crypto.Crypto
   | FileSystem.FileSystem
+  | HttpClient.HttpClient
   | OpenCodeRuntime
   | Path.Path
   | ProviderEventLoggers
@@ -144,6 +142,9 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
       const serverConfig = yield* ServerConfig;
       const eventLoggers = yield* ProviderEventLoggers;
       const serverSettings = yield* ServerSettingsService;
+      const fs = yield* FileSystem.FileSystem;
+      const http = yield* HttpClient.HttpClient;
+      const path = yield* Path.Path;
       const settings = { ...config, enabled } satisfies GeminiSettings;
       const port = resolvePort(settings.port);
       const hasCookies = settings.psid.trim().length > 0 && settings.psidts.trim().length > 0;
@@ -155,15 +156,36 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
       // The forced config is injected into the process environment of the
       // OpenCode server the adapter spawns. Cookies are intentionally not
       // included: the local bridge owns them.
+      const instanceEnv = mergeProviderInstanceEnvironment(environment);
+      const apiKey = instanceEnv.GEMINI_API_KEY?.trim() || GEMINI_API_KEY;
       const processEnv: NodeJS.ProcessEnv = {
-        ...mergeProviderInstanceEnvironment(environment),
-        OPENCODE_CONFIG_CONTENT: buildGeminiConfigContent(port),
+        ...instanceEnv,
+        OPENCODE_CONFIG_CONTENT: buildGeminiConfigContent(port, apiKey),
         OPENCODE_CONFIG_PROJECT_DISABLE: "1",
       };
 
+      const configuredBinary = settings.binaryPath.trim() || "opencode";
+      const editionBinary =
+        configuredBinary === "opencode" && process.platform === "win32" && instanceEnv.LOCALAPPDATA
+          ? path.join(
+              instanceEnv.LOCALAPPDATA,
+              "T3 Code (Gemini)",
+              "runtime",
+              "opencode",
+              "node_modules",
+              `opencode-windows-${process.arch}`,
+              "bin",
+              "opencode.exe",
+            )
+          : undefined;
+      const binaryPath =
+        editionBinary && (yield* fs.exists(editionBinary).pipe(Effect.orElseSucceed(() => false)))
+          ? editionBinary
+          : configuredBinary;
+
       const openCodeSettings: OpenCodeSettings = {
         enabled: settings.enabled,
-        binaryPath: settings.binaryPath.trim() || DEFAULT_GEMINI_BINARY_PATH,
+        binaryPath,
         serverUrl: "",
         serverPassword: "",
         customModels: [],
@@ -181,7 +203,7 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
         continuationGroupKey: continuationIdentity.continuationKey,
       });
 
-      const makeSnapshot = (checkedAt: string) =>
+      const makeSnapshot = (checkedAt: string, probe: ProviderProbeResult) =>
         buildServerProvider({
           driver: DRIVER_KIND,
           presentation: {
@@ -192,26 +214,23 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
           checkedAt,
           models: GEMINI_MODELS,
           slashCommands: [COMPACT_SLASH_COMMAND],
-          probe: {
-            installed: hasCookies,
-            version: null,
-            status: !settings.enabled || !verified ? "warning" : "ready",
-            auth: { status: verified ? "authenticated" : "unauthenticated" },
-            ...(!settings.enabled
-              ? { message: "Gemini is disabled in T3 Code settings." }
-              : verified
-                ? {}
-                : hasCookies
-                  ? {
-                      message:
-                        "Credentials saved but not yet verified with Google. Open " +
-                        "Settings → Providers → Gemini and use 'Verify & save' with the bridge running.",
-                    }
-                  : {
-                      message: "Add your Gemini web-app cookies in provider settings to connect.",
-                    }),
-          },
+          probe,
         });
+      const checkProvider = Effect.gen(function* () {
+        const probe: ProviderProbeResult = settings.enabled
+          ? yield* probeGeminiBridge({ port, key: apiKey, cookiesVerified: verified }).pipe(
+              Effect.provideService(HttpClient.HttpClient, http),
+            )
+          : {
+              installed: false,
+              version: null,
+              status: "warning",
+              auth: { status: "unknown" },
+              message: "Gemini is disabled in T3 Code settings.",
+            };
+        const now = yield* DateTime.now;
+        return stampIdentity(makeSnapshot(DateTime.formatIso(now), probe));
+      });
 
       const adapter = yield* makeOpenCodeAdapter(openCodeSettings, {
         instanceId,
@@ -237,11 +256,8 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
         getSettings: snapshotSettings.getSettings,
         streamSettings: snapshotSettings.streamSettings,
         haveSettingsChanged: haveProviderSnapshotSettingsChanged,
-        initialSnapshot: () =>
-          Effect.map(DateTime.now, (now) => stampIdentity(makeSnapshot(DateTime.formatIso(now)))),
-        checkProvider: Effect.map(DateTime.now, (now) =>
-          stampIdentity(makeSnapshot(DateTime.formatIso(now))),
-        ),
+        initialSnapshot: () => checkProvider,
+        checkProvider,
       }).pipe(
         Effect.mapError(
           (cause) =>

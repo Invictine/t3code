@@ -7,21 +7,23 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
 import * as Electron from "electron";
+import { GEMINI_DESKTOP_SCHEME } from "../app/GeminiDesktopVariant.ts";
 
 export const DESKTOP_HOST = "app";
 export const DESKTOP_PRODUCTION_SCHEME = "t3code";
 export const DESKTOP_DEVELOPMENT_SCHEME = "t3code-dev";
 
-export function getDesktopScheme(isDevelopment: boolean): string {
+export function getDesktopScheme(isDevelopment: boolean, isGeminiVariant = false): string {
+  if (isGeminiVariant) return GEMINI_DESKTOP_SCHEME;
   return isDevelopment ? DESKTOP_DEVELOPMENT_SCHEME : DESKTOP_PRODUCTION_SCHEME;
 }
 
-export function getDesktopOrigin(isDevelopment: boolean): string {
-  return `${getDesktopScheme(isDevelopment)}://${DESKTOP_HOST}`;
+export function getDesktopOrigin(isDevelopment: boolean, isGeminiVariant = false): string {
+  return `${getDesktopScheme(isDevelopment, isGeminiVariant)}://${DESKTOP_HOST}`;
 }
 
-export function getDesktopUrl(isDevelopment: boolean): string {
-  return `${getDesktopOrigin(isDevelopment)}/`;
+export function getDesktopUrl(isDevelopment: boolean, isGeminiVariant = false): string {
+  return `${getDesktopOrigin(isDevelopment, isGeminiVariant)}/`;
 }
 
 export class ElectronProtocolRegistrationError extends Schema.TaggedErrorClass<ElectronProtocolRegistrationError>()(
@@ -110,28 +112,20 @@ function withContentSecurityPolicy(response: Response, policy: string): Response
  * Must run synchronously during process bootstrap, before Electron emits `ready`.
  */
 export function registerDesktopSchemePrivilegesSync(): void {
-  Electron.protocol.registerSchemesAsPrivileged([
-    {
-      scheme: DESKTOP_PRODUCTION_SCHEME,
-      privileges: {
-        standard: true,
-        secure: true,
-        supportFetchAPI: true,
-        corsEnabled: true,
-        stream: true,
-      },
-    },
-    {
-      scheme: DESKTOP_DEVELOPMENT_SCHEME,
-      privileges: {
-        standard: true,
-        secure: true,
-        supportFetchAPI: true,
-        corsEnabled: true,
-        stream: true,
-      },
-    },
-  ]);
+  Electron.protocol.registerSchemesAsPrivileged(
+    [DESKTOP_PRODUCTION_SCHEME, DESKTOP_DEVELOPMENT_SCHEME, GEMINI_DESKTOP_SCHEME].map(
+      (scheme) => ({
+        scheme,
+        privileges: {
+          standard: true,
+          secure: true,
+          supportFetchAPI: true,
+          corsEnabled: true,
+          stream: true,
+        },
+      }),
+    ),
+  );
 }
 
 const registerDesktopSchemePrivileges = Effect.sync(registerDesktopSchemePrivilegesSync).pipe(

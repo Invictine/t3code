@@ -16,6 +16,7 @@ import serverPackageJson from "../../../server/package.json" with { type: "json"
 
 import * as DesktopBackendManager from "./DesktopBackendManager.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
+import { GEMINI_DESKTOP_HOME } from "../app/GeminiDesktopVariant.ts";
 import * as DesktopServerExposure from "./DesktopServerExposure.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
@@ -506,6 +507,9 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       cwd: environment.backendCwd,
       env: {
         ...backendChildEnvPatch(),
+        ...(environment.isGeminiVariant
+          ? { T3CODE_HOME: environment.baseDir, VITE_DEV_SERVER_URL: undefined }
+          : {}),
         ELECTRON_RUN_AS_NODE: "1",
       },
       // Primary wants process.env (PATH, dev-runner's T3CODE_HOME, etc.).
@@ -556,6 +560,7 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
     // Omit t3Home so the Linux backend uses its own home dir instead of
     // the Windows-side baseDir (which would be a /mnt/c path and share
     // the SQLite file with the primary).
+    ...(environment.isGeminiVariant ? { t3Home: `~/${GEMINI_DESKTOP_HOME}` } : {}),
     host: wslBindHost,
     desktopBootstrapToken: input.bootstrapToken,
     // PortSchema rejects 0, so when tailscale serve is disabled we still

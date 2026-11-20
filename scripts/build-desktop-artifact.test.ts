@@ -264,6 +264,33 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
   });
 
+  it.effect("packages the Windows Gemini app without the stock update feed", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "win",
+        "nsis",
+        "0.0.38-gemini.1",
+        false,
+        false,
+        undefined,
+        undefined,
+      ).pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: { GITHUB_REPOSITORY: "pingdotgg/t3code" },
+            }),
+          ),
+        ),
+      );
+
+      assert.equal(config.appId, "com.invictine.t3code.gemini");
+      assert.equal(config.productName, "T3 Code (Gemini)");
+      assert.equal(config.publish, null);
+      assert.equal(config.artifactName, "T3-Code-Gemini-${version}-${arch}.${ext}");
+    }),
+  );
+
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
     assert.deepStrictEqual(resolveDesktopBuildIconAssets("0.0.17"), {
       macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,

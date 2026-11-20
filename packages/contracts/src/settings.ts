@@ -766,12 +766,9 @@ export type OpenCodeSettings = typeof OpenCodeSettings.Type;
 /**
  * Gemini web-app (`gemini.google.com`) settings.
  *
- * Google exposes no official OAuth for the web-app-only Argon / Hydrogen
- * models, so sign-in uses the same two session cookies the web app itself
- * uses. They are stored as provider-instance settings and never logged. The
- * local OpenAI-compatible bridge that consumes them is configured with
- * `port`, and `binaryPath` selects the native OpenCode executable the driver
- * launches with a forced, Gemini-only config.
+ * The bridge can use a signed-in Chrome session or the optional saved cookies.
+ * `port` identifies the bridge and `binaryPath` selects the OpenCode executable
+ * the driver launches with a Gemini config.
  */
 export const GeminiSettings = makeProviderSettingsSchema(
   {
@@ -779,9 +776,7 @@ export const GeminiSettings = makeProviderSettingsSchema(
       Schema.withDecodingDefault(Effect.succeed(false)),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
-    // Set only after the bridge confirmed the cookies with Google. Cookies
-    // merely being present is NOT proof of a working sign-in, so the driver
-    // reports the connection as unauthenticated until this is true.
+    // Set after the bridge confirms cookies with Google for the cookie backend.
     verified: Schema.Boolean.pipe(
       Schema.withDecodingDefault(Effect.succeed(false)),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
@@ -790,7 +785,7 @@ export const GeminiSettings = makeProviderSettingsSchema(
       Schema.annotateKey({
         title: "OpenCode executable",
         description:
-          "Path to the native OpenCode executable. Leave empty to use the bundled native default.",
+          "Path to the native OpenCode executable. Leave empty to use the local installation.",
         providerSettingsForm: {
           placeholder: "opencode",
           clearWhenEmpty: "omit",

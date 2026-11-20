@@ -34,7 +34,8 @@ export interface GeminiCredentials {
 const API_KEY = "gemini-local";
 
 function readGeminiCredentials(config: unknown): GeminiCredentials {
-  const raw = config !== null && typeof config === "object" ? (config as Record<string, unknown>) : {};
+  const raw =
+    config !== null && typeof config === "object" ? (config as Record<string, unknown>) : {};
   const stringValue = (key: string) =>
     typeof raw[key] === "string" ? (raw[key] as string).trim() : "";
   return {
@@ -213,7 +214,11 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
 
   return (
     <section aria-label="Gemini setup" className="grid gap-3 text-xs">
-      <p>Gemini runs on a local bridge on this environment.</p>
+      <p>
+        Gemini uses the bridge on this environment. In Chrome mode, keep Chrome running with the
+        Gemini bridge extension enabled and your Gemini account signed in. Available models depend
+        on your Gemini account.
+      </p>
       {!props.enabled ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-muted-foreground">Enable it to use it in threads.</span>
@@ -228,18 +233,20 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
         <p className="text-muted-foreground">This connection cannot change provider setup.</p>
       ) : (
         <div className="grid gap-2 border-t border-border/60 pt-3">
-          <p className="font-medium">Google account</p>
+          <p className="font-medium">Cookie backend (optional)</p>
           <p role="status" className="text-muted-foreground">
             {verified
-              ? "Signed in. Cookies verified live with Google."
+              ? "The bridge previously verified these cookies with Google."
               : hasCookies
                 ? "Cookies saved but NOT yet verified with Google. With the bridge running, use 'Apply saved cookies' to confirm them."
-                : "Paste the session cookies from a signed-in gemini.google.com tab."}
+                : "Save cookies only if the bridge is configured for the cookie backend."}
           </p>
-          {notice ? <p className="text-muted-foreground [overflow-wrap:anywhere]">{notice}</p> : null}
+          {notice ? (
+            <p className="text-muted-foreground [overflow-wrap:anywhere]">{notice}</p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button size="xs" variant="outline" onClick={openDialog}>
-              {hasCookies ? "Update cookies" : "Sign in"}
+              {hasCookies ? "Update cookies" : "Set up cookies"}
             </Button>
             {hasCookies && !verified ? (
               <Button
@@ -338,7 +345,12 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
             <Button size="xs" variant="ghost" onClick={() => setOpen(false)} disabled={verifying}>
               Cancel
             </Button>
-            <Button size="xs" variant="outline" onClick={() => void verifyAndSave()} disabled={verifying}>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => void verifyAndSave()}
+              disabled={verifying}
+            >
               {verifying ? "Checking…" : "Verify & save"}
             </Button>
           </DialogFooter>
