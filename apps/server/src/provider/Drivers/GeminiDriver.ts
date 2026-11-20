@@ -145,10 +145,27 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
       // included: the local bridge owns them.
       const instanceEnv = mergeProviderInstanceEnvironment(environment);
       const apiKey = instanceEnv.GEMINI_API_KEY?.trim() || GEMINI_API_KEY;
+
+      // OpenCode v1 MERGES OPENCODE_CONFIG_CONTENT with the global config and
+      // does not recognize OPENCODE_CONFIG_PROJECT_DISABLE. Without isolation
+      // the spawned server reads ~/.config/opencode (which can contain keys
+      // from a newer OpenCode) and the shared opencode.db, then exits during
+      // startup. Point every XDG root at a Gemini-owned directory and use the
+      // real project-config flag. Provider-instance env vars still win so a
+      // user can override these explicitly.
+      const geminiHome =
+        instanceEnv.T3CODE_HOME?.trim() ||
+        path.join(
+          instanceEnv.USERPROFILE || process.env.USERPROFILE || ".",
+          ".t3-gemini",
+        );
       const processEnv: NodeJS.ProcessEnv = {
+        XDG_CONFIG_HOME: path.join(geminiHome, "opencode-config"),
+        XDG_DATA_HOME: path.join(geminiHome, "opencode-data"),
+        XDG_STATE_HOME: path.join(geminiHome, "opencode-state"),
+        OPENCODE_DISABLE_PROJECT_CONFIG: "1",
         ...instanceEnv,
         OPENCODE_CONFIG_CONTENT: buildGeminiConfigContent(port, apiKey),
-        OPENCODE_CONFIG_PROJECT_DISABLE: "1",
       };
 
       const configuredBinary = settings.binaryPath.trim() || "opencode";
