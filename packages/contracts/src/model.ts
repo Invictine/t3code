@@ -157,6 +157,7 @@ const GEMINI_DRIVER_KIND = ProviderDriverKind.make("gemini");
  */
 export const GEMINI_ARGON_MODEL = "gemini-app/argon";
 export const GEMINI_HYDROGEN_MODEL = "gemini-app/hydrogen";
+export const GEMINI_NEON_MODEL = "gemini-app/neon";
 
 export const DEFAULT_MODEL = "gpt-5.6-sol";
 
@@ -182,7 +183,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Partial<Record<ProviderDriverKind, strin
   [GROK_DRIVER_KIND]: "grok-build",
   [OPENCODE_DRIVER_KIND]: "openai/gpt-5",
   [ProviderDriverKind.make("antigravity")]: ANTIGRAVITY_DEFAULT_MODEL,
-  [GEMINI_DRIVER_KIND]: GEMINI_ARGON_MODEL,
+  [GEMINI_DRIVER_KIND]: GEMINI_NEON_MODEL,
 };
 
 /** Per-provider text generation model defaults. */
@@ -194,7 +195,7 @@ export const DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER: Partial<
   [CLAUDE_DRIVER_KIND]: "claude-haiku-4-5",
   [CURSOR_DRIVER_KIND]: "composer-2",
   [OPENCODE_DRIVER_KIND]: "openai/gpt-5",
-  [GEMINI_DRIVER_KIND]: GEMINI_ARGON_MODEL,
+  [GEMINI_DRIVER_KIND]: GEMINI_NEON_MODEL,
 };
 
 export const MODEL_SLUG_ALIASES_BY_PROVIDER: Partial<
@@ -226,6 +227,8 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER: Partial<
     "gemini-4-argon": GEMINI_ARGON_MODEL,
     hydrogen: GEMINI_HYDROGEN_MODEL,
     "gemini-4-hydrogen": GEMINI_HYDROGEN_MODEL,
+    neon: GEMINI_NEON_MODEL,
+    "gemini-4-neon": GEMINI_NEON_MODEL,
   },
 };
 

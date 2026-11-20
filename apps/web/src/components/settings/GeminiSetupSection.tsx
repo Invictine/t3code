@@ -1,7 +1,7 @@
 /**
  * Gemini cookie sign-in.
  *
- * Google has no official OAuth for the web-app-only Argon / Hydrogen models,
+ * Google has no official OAuth for the web app's Neon model,
  * so the correct analog to Antigravity's browser flow is a dialog where the
  * user pastes the two `__Secure-1PSID*` cookies from a signed-in
  * gemini.google.com session. The values are stored as provider-instance
@@ -101,12 +101,9 @@ async function verifyWithBridge(
 function describeModelAvailability(models: unknown): string {
   if (models === null || typeof models !== "object") return "";
   const raw = models as Record<string, unknown>;
-  const flag = (key: string) =>
-    raw[key] === true ? "available" : raw[key] === false ? "NOT available" : "unknown";
-  return (
-    ` Bridge reports: Argon ${flag("argon")}, Hydrogen ${flag("hydrogen")} ` +
-    "(advisory — the provider still lists both)."
-  );
+  if (raw.neon === true) return " The bridge reports that Neon is available.";
+  if (raw.neon === false) return " The bridge reports that Neon is unavailable.";
+  return "";
 }
 
 interface GeminiSetupSectionProps {
@@ -215,9 +212,9 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
   return (
     <section aria-label="Gemini setup" className="grid gap-3 text-xs">
       <p>
-        Gemini uses the bridge on this environment. In Chrome mode, keep Chrome running with the
-        Gemini bridge extension enabled and your Gemini account signed in. Available models depend
-        on your Gemini account.
+        Gemini 4 Neon uses the bridge on this environment. In Chrome mode, keep Chrome running with
+        the Gemini bridge extension enabled and your Gemini account signed in. Available models
+        depend on your Gemini account.
       </p>
       {!props.enabled ? (
         <div className="flex flex-wrap items-center gap-2">

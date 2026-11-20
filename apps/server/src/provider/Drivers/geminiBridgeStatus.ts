@@ -53,15 +53,13 @@ export function probeGeminiBridge(input: {
     if (
       !isRecord(status) ||
       status.status !== "ok" ||
-      !["gemini-4-argon", "gemini-4-hydrogen"].every((id) =>
-        modelList.some((model: unknown) => isRecord(model) && model.id === id),
-      )
+      !modelList.some((model: unknown) => isRecord(model) && model.id === "gemini-4-neon")
     ) {
       return {
         ...connected,
         status: "warning",
         auth: { status: "unknown" },
-        message: "The local bridge did not advertise Argon and Hydrogen. Check the bridge version.",
+        message: "The local bridge did not advertise Gemini 4 Neon. Check the bridge version.",
       } satisfies ProviderProbeResult;
     }
     if (status.active_backend === "chrome") {

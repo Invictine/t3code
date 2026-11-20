@@ -1,10 +1,10 @@
-﻿import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
 import { probeGeminiBridge } from "./geminiBridgeStatus.ts";
 
-const catalog = { data: [{ id: "gemini-4-argon" }, { id: "gemini-4-hydrogen" }] };
+const catalog = { data: [{ id: "gemini-4-neon" }] };
 const bridge = (
   response: (request: HttpClientRequest.HttpClientRequest) => Response,
   cookiesVerified = false,

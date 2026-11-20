@@ -1,21 +1,18 @@
 /**
- * GeminiDriver — first-class provider for the Gemini web app's Argon /
- * Hydrogen models.
+ * GeminiDriver for the Gemini web app's Neon model.
  *
  * The local bridge either drives a Chrome worker or uses session cookies.
  * Readiness follows the live bridge's selected backend. The Chrome worker
  * uses its existing browser session and does not need cookies saved in T3.
  *
- * The model catalog is static: the two supported models are supplied by this
- * driver rather than by the server-controlled model manifest. Agent execution
+ * The model catalog exposes Neon. Agent execution
  * reuses the proven OpenCode adapter, spawning the native OpenCode executable
  * with a forced, Gemini-only config through `OPENCODE_CONFIG_CONTENT`.
  *
  * @module provider/Drivers/GeminiDriver
  */
 import {
-  GEMINI_ARGON_MODEL,
-  GEMINI_HYDROGEN_MODEL,
+  GEMINI_NEON_MODEL,
   GeminiSettings,
   type OpenCodeSettings,
   ProviderDriverKind,
@@ -62,20 +59,11 @@ import { withInstanceIdentity } from "./instanceIdentity.ts";
 const DRIVER_KIND = ProviderDriverKind.make("gemini");
 const decodeSettings = Schema.decodeSync(GeminiSettings);
 
-/** The only two models this provider offers. No server manifest is consulted. */
 export const GEMINI_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
-    slug: GEMINI_ARGON_MODEL,
-    name: "Gemini 4 Argon",
-    shortName: "Argon",
-    subProvider: "gemini-app",
-    isCustom: false,
-    capabilities: null,
-  },
-  {
-    slug: GEMINI_HYDROGEN_MODEL,
-    name: "Gemini 4 Hydrogen",
-    shortName: "Hydrogen",
+    slug: GEMINI_NEON_MODEL,
+    name: "Gemini 4 Neon",
+    shortName: "Neon",
     subProvider: "gemini-app",
     isCustom: false,
     isDefault: true,
@@ -102,7 +90,7 @@ function resolvePort(raw: string | undefined): number {
 export function buildGeminiConfigContent(port: number, apiKey = GEMINI_API_KEY): string {
   return JSON.stringify({
     $schema: "https://opencode.ai/config.json",
-    model: GEMINI_HYDROGEN_MODEL,
+    model: GEMINI_NEON_MODEL,
     enabled_providers: ["gemini-app"],
     provider: {
       "gemini-app": {
@@ -113,8 +101,7 @@ export function buildGeminiConfigContent(port: number, apiKey = GEMINI_API_KEY):
           apiKey,
         },
         models: {
-          argon: { name: "Gemini 4 Argon", tool_call: true },
-          hydrogen: { name: "Gemini 4 Hydrogen", tool_call: true },
+          neon: { name: "Gemini 4 Neon", tool_call: true },
         },
       },
     },
