@@ -1,14 +1,16 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useLocation, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { EnvironmentId } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 
-import { WelcomeWizard } from "../components/onboarding/WelcomeWizard";
+import { NoProjectsHero } from "../components/NoProjectsHero";
+import { WelcomePage } from "../components/onboarding/WelcomePage";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 
-/**
- * First-run welcome wizard. Full-screen, outside the sidebar shell (the root
- * route mounts this path bare, like /pair). Reached only via the first-run
- * gate on the index route; visiting it directly after onboarding is harmless —
- * finishing again just refreshes the completion flag.
- */
+const decodeEnvironmentId = Schema.decodeOption(EnvironmentId);
+
 export const Route = createFileRoute("/welcome")({
   beforeLoad: ({ context }) => {
     const { authGateState } = context;
@@ -20,25 +22,40 @@ export const Route = createFileRoute("/welcome")({
 });
 
 function WelcomeRouteView() {
-  const { authGateState } = Route.useRouteContext();
   const navigate = useNavigate();
+  const hash = useLocation({ select: (location) => location.hash });
+  // A ChatGPT sign-in returns here with the computer it set up.
+  const resumeEnvironmentId = hash.startsWith("agents:")
+    ? Option.getOrUndefined(decodeEnvironmentId(hash.slice("agents:".length)))
+    : undefined;
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const { environments, isReady } = useEnvironments();
+  // Trust the id only once the catalog has it; an unknown computer falls back to this one.
+  const waitingForCatalog =
+    !isReady && (resumeEnvironmentId !== undefined || primaryEnvironmentId === null);
+  const resumeKnown =
+    resumeEnvironmentId !== undefined &&
+    environments.some((environment) => environment.environmentId === resumeEnvironmentId);
+  const environmentId = (resumeKnown ? resumeEnvironmentId : undefined) ?? primaryEnvironmentId;
+  // The root can remount this pending outlet after navigation; do not reopen setup.
+  const isWelcomeRoute = useLocation({ select: (location) => location.pathname === "/welcome" });
+  const [dismissed, setDismissed] = useState(false);
   const openNewThread = useNewThreadHandler();
-  // An authenticated gate means a primary server is serving this app —
-  // desktop, `npx t3`, or a dev server — and that server is "this machine"
-  // no matter what hostname the browser used. Only hosted-static has no
-  // local server to offer.
-  const localAvailable = authGateState.status === "authenticated";
+  if (waitingForCatalog) return null;
+  if (environmentId === null || !isWelcomeRoute || dismissed) return <NoProjectsHero />;
   return (
-    <WelcomeWizard
-      localAvailable={localAvailable}
-      onDone={(projectRef) => {
+    <WelcomePage
+      key={environmentId}
+      environmentId={environmentId}
+      onDone={async (projectRef) => {
+        setDismissed(true);
         if (projectRef !== undefined) {
-          void openNewThread(projectRef, { replace: true }).catch(() => {
-            void navigate({ to: "/", replace: true });
-          });
+          await openNewThread(projectRef, { replace: true }).catch(() =>
+            navigate({ to: "/", replace: true }),
+          );
           return;
         }
-        void navigate({ to: "/", replace: true });
+        await navigate({ to: "/", replace: true });
       }}
     />
   );

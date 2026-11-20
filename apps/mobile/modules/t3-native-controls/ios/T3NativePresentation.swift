@@ -7,21 +7,28 @@ final class T3PresentationSources {
     init(_ view: UIView) { self.view = view }
   }
 
-  private var entries: [String: Entry] = [:]
+  /// The same file embedded twice registers twice; removing one copy keeps the other.
+  private var entries: [String: [Entry]] = [:]
 
   func register(_ view: UIView, identifier: String) {
-    entries[identifier] = Entry(view)
+    var list = (entries[identifier] ?? []).filter { $0.view != nil && $0.view !== view }
+    list.append(Entry(view))
+    entries[identifier] = list
   }
 
   func remove(_ view: UIView, identifier: String) {
-    if entries[identifier]?.view == nil || entries[identifier]?.view === view {
-      entries.removeValue(forKey: identifier)
-    }
+    let list = (entries[identifier] ?? []).filter { $0.view != nil && $0.view !== view }
+    entries[identifier] = list.isEmpty ? nil : list
   }
 
   func view(for identifier: String) -> UIView? {
-    // Use the child bounds, not the wrapper's potentially stretched layout bounds.
-    entries[identifier]?.view?.subviews.first
+    let views = (entries[identifier] ?? []).compactMap(\.view)
+    // Prefer an on-screen copy, the latest first; use the child bounds, not the wrapper's stretched ones.
+    let source = views.last(where: { view in
+      guard let window = view.window else { return false }
+      return window.bounds.intersects(view.convert(view.bounds, to: window))
+    }) ?? views.last
+    return source?.subviews.first
   }
 }
 
@@ -36,6 +43,51 @@ final class T3PresentationSourceView: ExpoView {
 
   deinit {
     sources?.remove(self, identifier: identifier)
+  }
+}
+
+final class T3ContextSheetSizeView: ExpoView {
+  var contentHeight: CGFloat = 0 {
+    didSet { updateSheet() }
+  }
+  private weak var configuredSheet: UISheetPresentationController?
+  private var appliedHeight: CGFloat = 0
+
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    // The modal's presentation controller is attached after the content view.
+    DispatchQueue.main.async { [weak self] in self?.updateSheet() }
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    updateSheet()
+  }
+
+  private func updateSheet() {
+    guard window != nil, contentHeight > 0 else { return }
+    var responder: UIResponder? = self
+    while let current = responder {
+      if let controller = current as? UIViewController,
+         controller.presentingViewController != nil,
+         let sheet = controller.sheetPresentationController {
+        guard configuredSheet !== sheet || abs(appliedHeight - contentHeight) > 1 else { return }
+        configuredSheet = sheet
+        appliedHeight = contentHeight
+        let height = contentHeight
+        let identifier = UISheetPresentationController.Detent.Identifier("t3-context-content")
+        sheet.animateChanges {
+          sheet.detents = [.custom(identifier: identifier) { context in
+            min(height, context.maximumDetentValue * 0.92)
+          }]
+          sheet.selectedDetentIdentifier = identifier
+          sheet.prefersGrabberVisible = true
+          sheet.prefersScrollingExpandsWhenScrolledToEdge = false
+        }
+        return
+      }
+      responder = current.next
+    }
   }
 }
 
@@ -67,9 +119,13 @@ func presentFileShare(
   activity.overrideUserInterfaceStyle = source?.traitCollection.userInterfaceStyle
     ?? presenter.traitCollection.userInterfaceStyle
   activity.completionWithItemsHandler = { _, _, _, _ in promise.resolve(nil) }
-  activity.modalPresentationStyle = .popover
-  activity.popoverPresentationController?.sourceView = origin
-  activity.popoverPresentationController?.sourceRect = source?.bounds
-    ?? CGRect(x: origin.bounds.midX, y: origin.bounds.maxY, width: 0, height: 0)
+  if presenter.traitCollection.userInterfaceIdiom == .pad {
+    activity.popoverPresentationController?.sourceView = origin
+    activity.popoverPresentationController?.sourceRect = source?.bounds
+      ?? CGRect(x: origin.bounds.midX, y: origin.bounds.midY, width: 1, height: 1)
+  } else {
+    // Let UIKit adapt the remote share scene to the phone, not an anchored popover.
+    activity.modalPresentationStyle = .automatic
+  }
   presenter.present(activity, animated: true)
 }

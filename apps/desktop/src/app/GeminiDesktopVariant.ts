@@ -5,5 +5,5 @@ export const GEMINI_DESKTOP_HOME = ".t3-gemini";
 export const GEMINI_DESKTOP_PACKAGE = "t3code-gemini";
 
 export function isGeminiDesktopVersion(version: string): boolean {
-  return /^\d+\.\d+\.\d+-gemini(?:\.\d+)?$/.test(version);
+  return /^\d+\.\d+\.\d+(?:-nightly\.\d{8}\.\d+)?-gemini(?:\.\d+)?$/.test(version);
 }

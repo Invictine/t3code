@@ -1,36 +1,38 @@
 import type { EnvironmentMachineKind } from "@t3tools/contracts";
-import type { SFSymbol } from "expo-symbols";
+import { msg, useMessages } from "gt-react-native";
 
-import { SymbolView } from "./AppSymbol";
+import { SymbolView, type AppSymbolName } from "./ui/AppSymbol";
 
-const SYMBOL_BY_KIND: Record<EnvironmentMachineKind, SFSymbol> = {
+export const ENVIRONMENT_MACHINE_SYMBOLS = {
   server: "server.rack",
   cloud: "cloud",
+  linux: "terminal",
   desktop: "desktopcomputer",
   laptop: "laptopcomputer",
   "mac-mini": "macmini",
   "mac-studio": "macstudio",
+} as const satisfies Record<EnvironmentMachineKind, AppSymbolName>;
+
+const ENVIRONMENT_MACHINE_KIND_LABELS: Record<EnvironmentMachineKind, string> = {
+  server: msg("Server", { $context: "machine type" }),
+  cloud: msg("Cloud VM"),
+  linux: msg("Linux/WSL"),
+  desktop: msg("Desktop", { $context: "machine type" }),
+  laptop: msg("Laptop"),
+  "mac-mini": msg("Mini PC"),
+  "mac-studio": msg("Workstation"),
 };
 
-export const ENVIRONMENT_MACHINE_KIND_LABELS: Record<EnvironmentMachineKind, string> = {
-  server: "Server",
-  cloud: "Cloud VM",
-  desktop: "Desktop",
-  laptop: "Laptop",
-  "mac-mini": "Mac mini",
-  "mac-studio": "Mac Studio",
-};
-
-/** The glyph an environment wears in lists; SF Symbols on iOS, Tabler on Android. */
 export function EnvironmentMachineSymbol(props: {
   readonly kind: EnvironmentMachineKind;
   readonly size: number;
   readonly tintColorClassName: string;
 }) {
+  const m = useMessages();
   return (
     <SymbolView
-      accessibilityLabel={ENVIRONMENT_MACHINE_KIND_LABELS[props.kind]}
-      name={SYMBOL_BY_KIND[props.kind]}
+      accessibilityLabel={m(ENVIRONMENT_MACHINE_KIND_LABELS[props.kind])}
+      name={ENVIRONMENT_MACHINE_SYMBOLS[props.kind]}
       size={props.size}
       tintColorClassName={props.tintColorClassName}
       type="monochrome"

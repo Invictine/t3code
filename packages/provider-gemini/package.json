@@ -1,0 +1,15 @@
+{
+  "name": "@t3tools/provider-gemini",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": {
+      "types": "./src/client.ts",
+      "import": "./src/client.ts"
+    }
+  },
+  "dependencies": {
+    "@t3tools/contracts": "workspace:*",
+    "@t3tools/provider-core": "workspace:*"
+  }
+}

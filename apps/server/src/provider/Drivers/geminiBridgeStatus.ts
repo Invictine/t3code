@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 
-import type { ProviderProbeResult } from "../providerSnapshot.ts";
+import type { ProviderProbeResult } from "@t3tools/provider-core/server/snapshotProbe";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

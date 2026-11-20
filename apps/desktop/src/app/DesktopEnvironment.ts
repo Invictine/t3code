@@ -13,15 +13,15 @@ import * as Path from "effect/Path";
 
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
-import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
 import {
   GEMINI_DESKTOP_HOME,
   GEMINI_DESKTOP_ID,
-  GEMINI_DESKTOP_NAME,
-  GEMINI_DESKTOP_PACKAGE,
   isGeminiDesktopVersion,
 } from "./GeminiDesktopVariant.ts";
+import { resolveLinuxDesktopEntryName } from "./DesktopEarlyElectronStartup.ts";
+import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
 import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
+import type { OtlpProtocol } from "@t3tools/shared/observability";
 
 export interface MakeDesktopEnvironmentInput {
   readonly dirname: string;
@@ -60,32 +60,30 @@ export class DesktopEnvironment extends Context.Service<
     readonly browserArtifactsDir: string;
     readonly rootDir: string;
     readonly appRoot: string;
-    // Root of the tree containing apps/server/dist and node_modules for the
-    // backend. Equals appRoot everywhere except packaged Windows, where the
-    // server tree ships as the resources/server.asar sidecar (see
-    // scripts/build-desktop-artifact.ts) that the asar-aware
-    // ELECTRON_RUN_AS_NODE primary reads in place and the WSL backend
-    // extracts on demand (see DesktopWslServerTree).
     readonly serverRoot: string;
     readonly backendEntryPath: string;
+    readonly clientAssetsDir: string;
     readonly backendCwd: string;
     readonly preloadPath: string;
+    readonly compileCachePath: string;
     readonly appUpdateYmlPath: string;
     readonly devServerUrl: Option.Option<URL>;
     readonly devRemoteT3ServerEntryPath: Option.Option<string>;
     readonly configuredBackendPort: Option.Option<number>;
     readonly commitHashOverride: Option.Option<string>;
     readonly otlpTracesUrl: Option.Option<string>;
+    readonly otlpMetricsUrl: Option.Option<string>;
+    readonly otlpLogsUrl: Option.Option<string>;
     readonly otlpExportIntervalMs: number;
+    readonly otlpHeaders: Option.Option<Record<string, string>>;
+    readonly otlpProtocol: OtlpProtocol;
     readonly branding: DesktopAppBranding;
     readonly displayName: string;
     readonly appUserModelId: string;
     readonly linuxDesktopEntryName: string;
-    readonly linuxWmClass: string;
     readonly linuxApplicationsDir: string;
+    readonly desktopLauncherPath: Option.Option<string>;
     readonly appImagePath: Option.Option<string>;
-    readonly userDataDirName: string;
-    readonly legacyUserDataDirName: string;
     readonly defaultDesktopSettings: DesktopAppSettings.DesktopSettings;
     readonly runtimeInfo: DesktopRuntimeInfo;
     readonly resolvePickFolderDefaultPath: (rawOptions: unknown) => Option.Option<string>;
@@ -103,17 +101,14 @@ function resolveDesktopAppStageLabel(input: {
     return "Dev";
   }
 
-  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Alpha";
+  if (isGeminiDesktopVersion(input.appVersion)) return "Gemini";
+  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Beta";
 }
 
-function resolveDesktopAppBranding(input: {
+export function resolveDesktopAppBranding(input: {
   readonly isDevelopment: boolean;
   readonly appVersion: string;
-  readonly isGeminiVariant: boolean;
 }): DesktopAppBranding {
-  if (input.isGeminiVariant) {
-    return { baseName: APP_BASE_NAME, stageLabel: "Gemini", displayName: GEMINI_DESKTOP_NAME };
-  }
   const stageLabel = resolveDesktopAppStageLabel(input);
   return {
     baseName: APP_BASE_NAME,
@@ -162,7 +157,6 @@ const make = Effect.fn("desktop.environment.make")(function* (
     input.platform === "win32" && input.isPackaged && isGeminiDesktopVersion(input.appVersion);
   const devServerUrl = isGeminiVariant ? Option.none<URL>() : config.devServerUrl;
   const isDevelopment = Option.isSome(devServerUrl);
-  // A launch from a stock T3 shell must not inherit its state path.
   const t3Home = isGeminiVariant
     ? Option.some(path.join(homeDirectory, GEMINI_DESKTOP_HOME))
     : config.t3Home;
@@ -188,7 +182,6 @@ const make = Effect.fn("desktop.environment.make")(function* (
   const branding = resolveDesktopAppBranding({
     isDevelopment,
     appVersion: input.appVersion,
-    isGeminiVariant,
   });
   const displayName = branding.displayName;
   const stateDir = resolveDesktopStateDir({
@@ -197,16 +190,6 @@ const make = Effect.fn("desktop.environment.make")(function* (
     joinPath: path.join,
     t3Home,
   });
-  const userDataDirName = isGeminiVariant
-    ? GEMINI_DESKTOP_PACKAGE
-    : isDevelopment
-      ? "t3code-dev"
-      : "t3code";
-  const legacyUserDataDirName = isGeminiVariant
-    ? GEMINI_DESKTOP_NAME
-    : isDevelopment
-      ? "T3 Code (Dev)"
-      : "T3 Code (Alpha)";
   const linuxApplicationsDir = path.join(
     Option.getOrElse(config.xdgDataHome, () => path.join(homeDirectory, ".local", "share")),
     "applications",
@@ -238,8 +221,10 @@ const make = Effect.fn("desktop.environment.make")(function* (
     appRoot,
     serverRoot,
     backendEntryPath: path.join(serverRoot, "apps/server/dist/bin.mjs"),
+    clientAssetsDir: path.join(serverRoot, "apps/server/dist/client"),
     backendCwd: input.isPackaged ? homeDirectory : appRoot,
     preloadPath: path.join(input.dirname, "preload.cjs"),
+    compileCachePath: path.join(input.dirname, "compileCache.cjs"),
     appUpdateYmlPath: input.isPackaged
       ? path.join(resourcesPath, "app-update.yml")
       : path.join(input.appPath, "dev-app-update.yml"),
@@ -248,7 +233,11 @@ const make = Effect.fn("desktop.environment.make")(function* (
     configuredBackendPort: isGeminiVariant ? Option.none() : config.configuredBackendPort,
     commitHashOverride: config.commitHashOverride,
     otlpTracesUrl: config.otlpTracesUrl,
+    otlpMetricsUrl: config.otlpMetricsUrl,
+    otlpLogsUrl: config.otlpLogsUrl,
     otlpExportIntervalMs: config.otlpExportIntervalMs,
+    otlpHeaders: config.otlpHeaders,
+    otlpProtocol: config.otlpProtocol,
     branding,
     displayName,
     appUserModelId: isGeminiVariant
@@ -256,12 +245,10 @@ const make = Effect.fn("desktop.environment.make")(function* (
       : Option.getOrElse(config.appUserModelIdOverride, () =>
           isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code",
         ),
-    linuxDesktopEntryName: isDevelopment ? "t3code-dev.desktop" : "t3code.desktop",
-    linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",
+    linuxDesktopEntryName: resolveLinuxDesktopEntryName(isDevelopment),
     linuxApplicationsDir,
+    desktopLauncherPath: config.desktopLauncherPath,
     appImagePath: config.appImagePath,
-    userDataDirName,
-    legacyUserDataDirName,
     defaultDesktopSettings: DesktopAppSettings.resolveDefaultDesktopSettings(input.appVersion),
     runtimeInfo: resolveDesktopRuntimeInfo({
       platform: input.platform,
