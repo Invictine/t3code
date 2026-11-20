@@ -2796,7 +2796,15 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
 ) {
   const isGeminiVariant = platform === "win" && isGeminiDesktopVersion(version);
   const buildConfig: Record<string, unknown> = {
-    afterPack: (yield* Path.Path).join(yield* RepoRoot, "scripts/prepare-server-compile-cache.cjs"),
+    // Match the published Windows nightly payload and warm Gemini's cache at runtime.
+    ...(isGeminiVariant
+      ? {}
+      : {
+          afterPack: (yield* Path.Path).join(
+            yield* RepoRoot,
+            "scripts/prepare-server-compile-cache.cjs",
+          ),
+        }),
     appId: isGeminiVariant ? GEMINI_DESKTOP_ID : DESKTOP_APP_ID,
     productName: resolveDesktopProductName(version),
     artifactName: isGeminiVariant
