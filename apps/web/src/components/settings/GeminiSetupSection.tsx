@@ -11,6 +11,7 @@
 import { useState } from "react";
 
 import { Button } from "../ui/button";
+import { GeminiAccountControls } from "./GeminiBridgeControls";
 import {
   Dialog,
   DialogDescription,
@@ -111,6 +112,7 @@ interface GeminiSetupSectionProps {
   readonly enabled: boolean;
   readonly readOnly: boolean;
   readonly onEnable: () => void;
+  readonly onCatalogChange: () => void;
   readonly onCredentialsChange: (credentials: GeminiCredentials) => void;
 }
 
@@ -276,6 +278,9 @@ export function GeminiSetupSection(props: GeminiSetupSectionProps) {
         </div>
       )}
 
+      {!props.readOnly ? (
+        <GeminiAccountControls port={saved.port} onCatalogChange={props.onCatalogChange} />
+      ) : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogPopup className="max-w-md">
           <DialogHeader>

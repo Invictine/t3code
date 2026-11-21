@@ -30,7 +30,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { HttpClient } from "effect/http";
+import { HttpClient, HttpClientRequest } from "effect/http";
 
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as OpenCodeServerOwner from "@t3tools/provider-opencode/server/OpenCodeServerOwner";
@@ -62,6 +62,19 @@ export const GEMINI_MODELS: ReadonlyArray<ServerProviderModel> = [
   },
 ];
 
+const EXACT_MODELS = [
+  ...GEMINI_MODELS,
+  ...(["Argon", "Hydrogen"] as const).map((name) => ({
+    slug: `gemini-app/${name.toLowerCase()}`,
+    name: `Gemini 4 ${name}`,
+    shortName: name,
+    subProvider: "gemini-app",
+    isCustom: false,
+    isDefault: false,
+    capabilities: null,
+  })),
+] satisfies ReadonlyArray<ServerProviderModel>;
+
 const GEMINI_API_KEY = "gemini-local";
 const DEFAULT_BRIDGE_PORT = 8100;
 
@@ -84,7 +97,9 @@ export function buildGeminiConfigContent(port: number, apiKey = GEMINI_API_KEY):
           baseURL: `http://127.0.0.1:${port}/v1`,
           apiKey,
         },
-        models: { neon: { name: "Gemini 4 Neon", tool_call: true } },
+        models: Object.fromEntries(
+          EXACT_MODELS.map(({ slug, name }) => [slug.split("/")[1], { name, tool_call: true }]),
+        ),
       },
     },
   });
@@ -184,6 +199,32 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
               auth: { status: "unknown" },
               message: "Gemini is disabled in T3 Code settings.",
             };
+        const models =
+          probe.status === "ready"
+            ? yield* Effect.gen(function* () {
+                const response = yield* http.execute(
+                  HttpClientRequest.get("http://127.0.0.1:" + port + "/v1/accounts").pipe(
+                    HttpClientRequest.setHeader("authorization", "Bearer " + apiKey),
+                  ),
+                );
+                if (response.status !== 200) return GEMINI_MODELS;
+                const catalog = (yield* response.json) as {
+                  default_authuser: string;
+                  accounts: ReadonlyArray<{ authuser: string; picker_models: string[] | null }>;
+                };
+                const offered = catalog.accounts.find(
+                  (account) => account.authuser === catalog.default_authuser,
+                )?.picker_models;
+                if (!offered) return GEMINI_MODELS;
+                return EXACT_MODELS.filter(({ slug }) => {
+                  const model = slug.slice("gemini-app/".length);
+                  return offered.includes(model) || offered.includes("gemini-4-" + model);
+                });
+              }).pipe(
+                Effect.timeout("2 seconds"),
+                Effect.orElseSucceed(() => GEMINI_MODELS),
+              )
+            : GEMINI_MODELS;
         const now = yield* DateTime.now;
         return stampIdentity(
           buildServerProvider({
@@ -191,7 +232,7 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
             presentation: { displayName: "Gemini", showInteractionModeToggle: false },
             enabled: settings.enabled,
             checkedAt: DateTime.formatIso(now),
-            models: GEMINI_MODELS,
+            models,
             probe,
           }),
         );

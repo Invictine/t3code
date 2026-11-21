@@ -1339,6 +1339,7 @@ function ProviderInstanceRow({
       ? allProjects.filter((project) => project.environmentId === environmentId)
       : undefined;
   const instance = explicitInstance ?? { driver };
+  const refreshGeminiCatalog = useAtomCommand(serverEnvironment.refreshProviders);
   const driverOption = providerClients.get(driver);
   const updateCandidate =
     liveProvider !== undefined && isProviderSettingsUpdateCandidate(liveProvider)
@@ -1412,6 +1413,9 @@ function ProviderInstanceRow({
         ) : mode === "editor" && driver === "gemini" ? (
           <GeminiSetupSection
             config={instance.config}
+            onCatalogChange={() => {
+              void refreshGeminiCatalog({ environmentId, input: { refreshModels: true } });
+            }}
             enabled={resolveProviderInstanceEnabled(instance)}
             readOnly={readOnly}
             onEnable={() => actions.enableInstance(instanceId, { ...instance, enabled: true })}

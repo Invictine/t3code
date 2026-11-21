@@ -1,4 +1,5 @@
 import { m } from "../i18n/messages";
+import { GeminiRequestStatus } from "./settings/GeminiBridgeControls";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useGT, useMessages } from "gt-react";
 import { ChildThreadApprovals } from "./chat/ChildThreadApprovals";
@@ -3695,6 +3696,21 @@ export default function ChatView(props: ChatViewProps) {
                                     />
                                   ) : null
                                 }
+                              />
+                            ) : null}
+                            {composerMounted &&
+                            selectedProvider === "gemini" &&
+                            canOperateThread ? (
+                              <GeminiRequestStatus
+                                port={
+                                  (activeProviderInstanceId
+                                    ? (
+                                        settings.providerInstances[activeProviderInstanceId]
+                                          ?.config as { port?: string } | undefined
+                                      )?.port
+                                    : undefined) || "8100"
+                                }
+                                session={activeProviderThread?.nativeThreadRef?.nativeId}
                               />
                             ) : null}
                             {!composerMounted ? null : (
