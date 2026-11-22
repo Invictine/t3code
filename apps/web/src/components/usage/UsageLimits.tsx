@@ -3,6 +3,7 @@ import {
   type EnvironmentId,
   type ProviderConsumeResetCreditOutcome,
   ProviderConsumeResetCreditInput,
+  ProviderDriverKind,
   ServerProvider,
   ServerProviderResetCredits,
   ServerProviderUsageWindow,
@@ -56,6 +57,7 @@ const PACE: Record<LimitPace, { readonly label: string; readonly icon: typeof Ga
 };
 
 export function barColor(driver: ServerProvider["driver"]): string {
+  if (driver === ProviderDriverKind.make("gemini")) return "#4285F4";
   const presentation = Object.values(PROVIDER_PRESENTATION).find(
     (entry) => entry.driverKind === driver,
   );

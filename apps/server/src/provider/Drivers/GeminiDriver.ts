@@ -41,6 +41,8 @@ import {
 import { OpenCodeSettings } from "@t3tools/provider-opencode/settings";
 import { makeOpenCodeTextGeneration } from "@t3tools/provider-opencode/server/textGeneration";
 import { probeGeminiBridge } from "./geminiBridgeStatus.ts";
+import { decodeGeminiUsage } from "./geminiUsage.ts";
+import { makeUnavailableUsageLimits } from "@t3tools/provider-core/server/usageLimits";
 
 const DRIVER_KIND = ProviderDriverKind.make("gemini");
 const MAINTENANCE_CAPABILITIES = makeManualOnlyProviderMaintenanceCapabilities({
@@ -199,6 +201,43 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
               auth: { status: "unknown" },
               message: "Gemini is disabled in T3 Code settings.",
             };
+        const checkedAt = DateTime.formatIso(yield* DateTime.now);
+        const usageProbe: ProviderProbeResult["usageLimits"] =
+          probe.status !== "ready"
+            ? undefined
+            : yield* Effect.gen(function* () {
+                const response = yield* http.execute(
+                  HttpClientRequest.get(`http://127.0.0.1:${port}/v1/usage`).pipe(
+                    HttpClientRequest.setHeader("authorization", "Bearer " + apiKey),
+                  ),
+                );
+                if (response.status !== 200) {
+                  return makeUnavailableUsageLimits({
+                    checkedAt,
+                    reason: "probeFailed",
+                    message: "The Gemini bridge could not read account usage.",
+                  });
+                }
+                const decoded = decodeGeminiUsage(yield* response.json, checkedAt);
+                return (
+                  decoded?.limits ??
+                  makeUnavailableUsageLimits({
+                    checkedAt,
+                    reason: "probeFailed",
+                    message: "The Gemini bridge returned an unreadable usage report.",
+                  })
+                );
+              }).pipe(
+                Effect.timeout("2 seconds"),
+                Effect.orElseSucceed(() =>
+                  makeUnavailableUsageLimits({
+                    checkedAt,
+                    reason: "probeFailed",
+                    message: "The Gemini bridge timed out while reading account usage.",
+                  }),
+                ),
+              );
+        const enrichedProbe = usageProbe === undefined ? probe : { ...probe, usageLimits: usageProbe };
         const models =
           probe.status === "ready"
             ? yield* Effect.gen(function* () {
@@ -233,7 +272,7 @@ export const GeminiDriver: ProviderDriver<GeminiSettings, GeminiDriverEnv> = {
             enabled: settings.enabled,
             checkedAt: DateTime.formatIso(now),
             models,
-            probe,
+            probe: enrichedProbe,
           }),
         );
       });

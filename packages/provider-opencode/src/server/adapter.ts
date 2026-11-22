@@ -939,6 +939,60 @@ function openCodeErrorMessage(event: Extract<OpenCodeEvent, { type: "session.err
   );
 }
 
+function openCodeRateLimitResetAt(
+  event: Extract<OpenCodeEvent, { type: "session.error" }>,
+  message: string,
+  nowMillis: number,
+): string | undefined {
+  const error = event.properties.error;
+  if (error?.name !== "APIError" || recordValue(error.data, "statusCode") !== 429) return undefined;
+
+  const data = error.data;
+  const headers = recordValue(data, "responseHeaders") ?? recordValue(data, "headers");
+  const header = (name: string) => {
+    const value =
+      recordValue(headers, name) ??
+      recordValue(headers, name.toLowerCase()) ??
+      (typeof headers === "object" && headers !== null
+        ? Object.entries(headers).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1]
+        : undefined);
+    return typeof value === "string" || typeof value === "number" ? String(value).trim() : undefined;
+  };
+  const resetSeconds = Number(header("x-ratelimit-reset"));
+  const toIso = (epochMillis: number) => {
+    if (!Number.isFinite(epochMillis) || Math.abs(epochMillis) > 8.64e15) return undefined;
+    return DateTime.formatIso(DateTime.makeUnsafe(epochMillis));
+  };
+  if (Number.isFinite(resetSeconds) && resetSeconds > 0 && resetSeconds <= 8.64e12) {
+    return toIso(resetSeconds * 1000);
+  }
+
+  const retryAfter = header("retry-after");
+  if (retryAfter !== undefined) {
+    const delaySeconds = Number(retryAfter);
+    if (Number.isFinite(delaySeconds) && delaySeconds >= 0) {
+      const resetAt = toIso(nowMillis + delaySeconds * 1000);
+      if (resetAt !== undefined) return resetAt;
+    } else {
+      const retryEpoch = Date.parse(retryAfter);
+      if (Number.isFinite(retryEpoch)) return toIso(retryEpoch);
+    }
+  }
+
+  // The Gemini bridge includes an ISO reset in its safe, user-readable 429 detail.
+  const resetPattern =
+    /\b(?:reset(?:s)?(?:\s+at)?|resets_at)\b[\s:=]*(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d))/i;
+  const detail = [
+    message,
+    recordString(data, "detail"),
+    recordString(data, "responseBody"),
+  ].find((text) => text !== undefined && resetPattern.test(text));
+  const reset = detail === undefined ? undefined : resetPattern.exec(detail)?.[1];
+  if (!reset) return undefined;
+  const resetEpoch = Date.parse(reset);
+  return Number.isFinite(resetEpoch) ? toIso(resetEpoch) : undefined;
+}
+
 function terminalStatusForError(
   event: Extract<OpenCodeEvent, { type: "session.error" }>,
   turn: ActiveOpenCodeTurn,
@@ -3212,10 +3266,17 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                     );
               const error = event.properties.error;
               const usageLimit = error?.name === "APIError" && error.data.statusCode === 429;
+              const message = openCodeErrorMessage(event);
               const failure = makeProviderFailure({
-                message: openCodeErrorMessage(event),
+                message,
                 code: error?.name ?? null,
                 class: usageLimit ? "usage_limit" : "provider_error",
+                resetAt:
+                  openCodeRateLimitResetAt(
+                    event,
+                    message,
+                    DateTime.toEpochMillis(yield* DateTime.now),
+                  ) ?? null,
               });
               if (
                 !isMessageAbortedError(event) &&

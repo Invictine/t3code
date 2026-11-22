@@ -635,7 +635,7 @@ describe("OpenCodeAdapterV2", () => {
     }).pipe(Effect.provide(Layer.merge(IdAllocator.layer, McpProviderSessions.layer))),
   );
 
-  it.effect("classifies APIError 429 as a usage limit", () =>
+  it.effect("classifies APIError 429 as a usage limit and preserves its reset time", () =>
     Effect.gen(function* () {
       const nativeEvents = asyncEventStream();
       const harness = yield* makeOpenCodeRuntimeHarness("usage-limit", "root", {
@@ -663,6 +663,8 @@ describe("OpenCodeAdapterV2", () => {
               data: {
                 message: "Provider rejected request",
                 statusCode: 429,
+                responseBody:
+                  '{"detail":"Gemini usage limit reached; reset at 2026-11-22T12:00:00Z."}',
                 isRetryable: true,
               },
             },
@@ -674,6 +676,7 @@ describe("OpenCodeAdapterV2", () => {
       );
       assert.equal(terminal?.status, "failed");
       assert.equal(terminal?.failure?.class, "usage_limit");
+      assert.equal(terminal?.failure?.resetAt, "2026-11-22T12:00:00.000Z");
     }).pipe(Effect.provide(Layer.merge(IdAllocator.layer, McpProviderSessions.layer))),
   );
 
