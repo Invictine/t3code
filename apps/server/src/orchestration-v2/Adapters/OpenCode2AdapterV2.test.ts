@@ -721,8 +721,22 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
         message: "Request failed. Resets at 2026-11-02T20:00:00Z.",
       },
     },
-  ] as const)("classifies $name as $failureClass", ({ error, failureClass }) =>
+    {
+      name: "a Gemini quota with a bridge reset time",
+      failureClass: "usage_limit",
+      resetAt: "2026-11-22T07:45:58.932Z",
+      error: {
+        type: "provider.quota",
+        message:
+          "Gemini 4 Neon usage limit reached on account u/0. Resets at 2026-11-22T07:45:58.932141+00:00",
+        status: 429,
+        retryAfterMs: 1_200_000,
+      },
+    },
+  ] as const)("classifies $name as $failureClass", (example) =>
     Effect.gen(function* () {
+      const { error, failureClass } = example;
+      const reset = "resetAt" in example ? { resetAt: example.resetAt } : {};
       const { runtime, thread } = yield* resumed([
         out("session.prompt", { sessionID: SESSION, text: "<any>" }),
         promptAccepted,
@@ -744,7 +758,13 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
       const seen = yield* Fiber.join(collected);
       assert.deepInclude(errorRows(seen)[0], {
         status: "running",
-        failure: { class: failureClass, code: error.type, message: error.message, retryable: true },
+        failure: {
+          class: failureClass,
+          code: error.type,
+          message: error.message,
+          retryable: true,
+          ...reset,
+        },
       });
       const ended = seen.find((event) => event.type === "turn.terminal");
       assert.equal(ended?.status, "failed");
@@ -753,6 +773,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
         code: error.type,
         message: error.message,
         retryable: null,
+        ...reset,
       });
     }),
   );

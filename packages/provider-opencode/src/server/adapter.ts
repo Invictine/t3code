@@ -68,7 +68,7 @@ import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/
 import { t3OrchestrationSystemPrompt } from "@t3tools/provider-core/server/orchestrationInstructions";
 import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
 import * as OpenCodeRuntime from "./OpenCodeRuntime.ts";
-import { readableProviderErrorMessage } from "./providerErrorMessage.ts";
+import { providerResetAt, readableProviderErrorMessage } from "./providerErrorMessage.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
@@ -956,7 +956,9 @@ function openCodeRateLimitResetAt(
       (typeof headers === "object" && headers !== null
         ? Object.entries(headers).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1]
         : undefined);
-    return typeof value === "string" || typeof value === "number" ? String(value).trim() : undefined;
+    return typeof value === "string" || typeof value === "number"
+      ? String(value).trim()
+      : undefined;
   };
   const resetSeconds = Number(header("x-ratelimit-reset"));
   const toIso = (epochMillis: number) => {
@@ -979,18 +981,7 @@ function openCodeRateLimitResetAt(
     }
   }
 
-  // The Gemini bridge includes an ISO reset in its safe, user-readable 429 detail.
-  const resetPattern =
-    /\b(?:reset(?:s)?(?:\s+at)?|resets_at)\b[\s:=]*(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d))/i;
-  const detail = [
-    message,
-    recordString(data, "detail"),
-    recordString(data, "responseBody"),
-  ].find((text) => text !== undefined && resetPattern.test(text));
-  const reset = detail === undefined ? undefined : resetPattern.exec(detail)?.[1];
-  if (!reset) return undefined;
-  const resetEpoch = Date.parse(reset);
-  return Number.isFinite(resetEpoch) ? toIso(resetEpoch) : undefined;
+  return providerResetAt(message, recordString(data, "detail"), recordString(data, "responseBody"));
 }
 
 function terminalStatusForError(

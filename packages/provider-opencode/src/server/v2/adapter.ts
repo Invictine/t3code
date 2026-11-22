@@ -65,7 +65,7 @@ import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import * as OpenCode2Client from "./OpenCode2Client.ts";
 import * as OpenCode2Server from "./OpenCode2Server.ts";
 import * as OpenCodeRuntime from "../OpenCodeRuntime.ts";
-import { readableProviderErrorMessage } from "../providerErrorMessage.ts";
+import { providerResetAt, readableProviderErrorMessage } from "../providerErrorMessage.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
 import { t3OrchestrationSystemPrompt } from "@t3tools/provider-core/server/orchestrationInstructions";
@@ -1611,6 +1611,9 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           code: error.type,
           class: isUsageLimit(error) ? "usage_limit" : "provider_error",
           retryable: true,
+          resetAt:
+            (error.status === 429 ? providerResetAt(error.message, error.response?.body) : null) ??
+            null,
         }),
         startedAt: turn.retry?.startedAt ?? (yield* DateTime.now),
       };
@@ -3007,7 +3010,10 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
               message: readableProviderErrorMessage(message, status, response?.body),
               code: type,
               class: isUsageLimit(event.data.error) ? "usage_limit" : "provider_error",
-              resetAt: claudeUsageLimit(message)?.resetAt ?? null,
+              resetAt:
+                (status === 429 ? providerResetAt(message, response?.body) : undefined) ??
+                claudeUsageLimit(message)?.resetAt ??
+                null,
             }),
           });
         }
