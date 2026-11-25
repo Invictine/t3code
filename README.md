@@ -17,11 +17,12 @@
   <a href="https://discord.gg/jn4EGJjrvv">Discord</a>
 </p>
 
-## T3 Code (Gemini) for Windows
+## [Deprecated] T3 Code (Gemini) for Windows
 
-This fork adds a native Gemini provider and installs side by side with regular T3 Code. OpenCode sends requests to a local bridge that uses your signed-in Gemini web session. **Gemini 4 Neon** is the default on eligible accounts.
+> [!WARNING]
+> **Deprecated:** The `feat/gemini-native-provider` fork and **T3 Code (Gemini)** Windows build are deprecated and unmaintained. Regular upstream T3 Code (`main`) now supports adding **Gemini** directly as an isolated OpenCode provider instance (`gemini-bridge`) without a custom fork — see [the regular T3 Code setup guide](https://github.com/Invictine/gemini-neon-bridge/blob/main/docs/t3-code-setup.md).
 
-The [gemini-jio-argon README](https://github.com/Invictine/gemini-jio-argon) has the demo, Windows build steps, and pinned bridge access requirements.
+This historical branch added a native Gemini provider side by side with regular T3 Code, driving a local OpenAI-compatible bridge backed by your signed-in Gemini web session.
 
 <p align="center">
   <a href="https://t3.codes">
