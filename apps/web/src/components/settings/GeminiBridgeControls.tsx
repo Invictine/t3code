@@ -25,7 +25,7 @@ type Ticket = {
   tabId: string | null;
   position?: number;
 };
-type Queue = { active: Ticket | null; queued: Ticket[] };
+type Queue = { active: Ticket | null; running?: Ticket[]; queued: Ticket[] };
 type ModelCheck = { ok: boolean; stage: string; message: string };
 
 async function bridge<T>(port: string, route: string, init?: RequestInit): Promise<T> {
@@ -259,7 +259,12 @@ export function GeminiRequestStatus({
     }
   }
 
-  const tickets = queue ? [...(queue.active ? [queue.active] : []), ...queue.queued] : [];
+  const tickets = queue
+    ? [
+        ...(queue.running?.length ? queue.running : queue.active ? [queue.active] : []),
+        ...queue.queued,
+      ]
+    : [];
   if (tickets.length === 0 && !error) return null;
   return (
     <section
